@@ -246,12 +246,13 @@ type tunnelConn struct {
 func (t *tunnelConn) Read(p []byte) (int, error) { return t.pr.Read(p) }
 
 func (t *tunnelConn) Write(p []byte) (int, error) {
+	total := len(p)
 	for len(p) > 0 {
 		n := min(len(p), vncChunkSize)
 		sendHttpReq(t.dev, false, t.srcAddr, t.destAddr, p[:n])
 		p = p[n:]
 	}
-	return len(p), nil
+	return total, nil
 }
 
 func (t *tunnelConn) Close() error {
