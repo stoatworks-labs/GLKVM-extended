@@ -17,6 +17,7 @@ func NewVncEndpointRepo(db *gorm.DB) *VncEndpointRepo { return &VncEndpointRepo{
 type vncEndpointRow struct {
 	ID          int64  `gorm:"column:id;primaryKey"`
 	Name        string `gorm:"column:name"`
+	Kind        string `gorm:"column:kind"`
 	Addr        string `gorm:"column:addr"`
 	ViaDevice   string `gorm:"column:via_device"`
 	Description string `gorm:"column:description"`
@@ -28,9 +29,14 @@ type vncEndpointRow struct {
 func (vncEndpointRow) TableName() string { return "vnc_endpoints" }
 
 func (r vncEndpointRow) toDomain() *vncendpoint.Endpoint {
+	kind := vncendpoint.Kind(r.Kind)
+	if kind == "" {
+		kind = vncendpoint.KindVNC // legacy rows predate the column
+	}
 	return &vncendpoint.Endpoint{
 		ID:          r.ID,
 		Name:        r.Name,
+		Kind:        kind,
 		Addr:        r.Addr,
 		ViaDevice:   r.ViaDevice,
 		Description: r.Description,
@@ -69,6 +75,7 @@ func (r *VncEndpointRepo) Create(ctx context.Context, e *vncendpoint.Endpoint) (
 	now := time.Now().Unix()
 	row := vncEndpointRow{
 		Name:        e.Name,
+		Kind:        string(e.Kind),
 		Addr:        e.Addr,
 		ViaDevice:   e.ViaDevice,
 		Description: e.Description,
@@ -87,6 +94,7 @@ func (r *VncEndpointRepo) Update(ctx context.Context, e *vncendpoint.Endpoint) e
 		Where("id = ?", e.ID).
 		Updates(map[string]any{
 			"name":         e.Name,
+			"kind":         string(e.Kind),
 			"addr":         e.Addr,
 			"via_device":   e.ViaDevice,
 			"description":  e.Description,

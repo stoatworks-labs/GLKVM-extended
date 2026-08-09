@@ -104,6 +104,7 @@ END;
 CREATE TABLE IF NOT EXISTS vnc_endpoints (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL DEFAULT '',
+  kind        TEXT    NOT NULL DEFAULT 'vnc',
   addr        TEXT    NOT NULL,
   via_device   TEXT    NOT NULL DEFAULT '',
   description  TEXT    NOT NULL DEFAULT '',

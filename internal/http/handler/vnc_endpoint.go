@@ -31,12 +31,22 @@ func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlis
 
 type vncEndpointReq struct {
 	Name        string `json:"name"`
+	Kind        string `json:"kind"`
 	Addr        string `json:"addr"`
 	ViaDevice   string `json:"viaDevice"`
 	Description string `json:"description"`
 	// Password: nil = leave unchanged (update) / none (create); "" = clear;
 	// non-empty = set. Never echoed back.
 	Password *string `json:"password"`
+}
+
+// resolveKind defaults an empty kind to VNC and validates it.
+func resolveKind(k string) (vncendpoint.Kind, bool) {
+	if k == "" {
+		return vncendpoint.KindVNC, true
+	}
+	kind := vncendpoint.Kind(k)
+	return kind, vncendpoint.ValidKind(kind)
 }
 
 // validateVncAddr checks host:port shape. Tunnelled endpoints must be IPv4
@@ -106,6 +116,11 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
+	kind, ok := resolveKind(req.Kind)
+	if !ok {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid kind", map[string]any{"field": "kind"}))
+		return
+	}
 	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
 		return
@@ -118,6 +133,7 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 
 	id, err := h.repo.Create(c.Request.Context(), &vncendpoint.Endpoint{
 		Name:        req.Name,
+		Kind:        kind,
 		Addr:        strings.TrimSpace(req.Addr),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,
@@ -145,6 +161,11 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
+	kind, ok := resolveKind(req.Kind)
+	if !ok {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid kind", map[string]any{"field": "kind"}))
+		return
+	}
 	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
 		return
@@ -168,6 +189,7 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 	err = h.repo.Update(c.Request.Context(), &vncendpoint.Endpoint{
 		ID:          id,
 		Name:        req.Name,
+		Kind:        kind,
 		Addr:        strings.TrimSpace(req.Addr),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,

@@ -151,8 +151,20 @@ func ensureVncEndpointsTable(ctx context.Context, db *sql.DB) error {
     // password_enc holds the AES-GCM ciphertext of the VNC password (base64),
     // or '' when the endpoint has no stored credential. Added via ALTER so
     // existing databases migrate in place.
-    if _, err := db.ExecContext(ctx,
+    if err := addColumnIfMissing(ctx, db,
         `ALTER TABLE vnc_endpoints ADD COLUMN password_enc TEXT NOT NULL DEFAULT ''`); err != nil {
+        return err
+    }
+    // kind identifies the protocol (vnc|rdp|xpra); legacy rows default to vnc.
+    if err := addColumnIfMissing(ctx, db,
+        `ALTER TABLE vnc_endpoints ADD COLUMN kind TEXT NOT NULL DEFAULT 'vnc'`); err != nil {
+        return err
+    }
+    return nil
+}
+
+func addColumnIfMissing(ctx context.Context, db *sql.DB, alter string) error {
+    if _, err := db.ExecContext(ctx, alter); err != nil {
         if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
             return err
         }

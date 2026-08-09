@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"rttys/internal/domain/vncendpoint"
 	"rttys/internal/pkg/vnccrypt"
 	"rttys/internal/store/sqlite"
 	"rttys/utils"
@@ -97,16 +99,21 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 		}
 	}
 
-	// Decrypt the stored password (if any). A key mismatch is logged and the
-	// session proceeds without injection (noVNC will prompt).
-	secret := srv.cfg.VncSecret
-	if secret == "" {
-		secret = srv.cfg.Token
-	}
-	password, derr := vnccrypt.Decrypt(secret, ep.PasswordEnc)
-	if derr != nil {
-		log.Warn().Err(derr).Msgf("vnc: cannot decrypt password for endpoint %d", ep.ID)
-		password = ""
+	// The RFB auth-proxy only applies to VNC; RDP (IronRDP-web) and xpra
+	// (xpra-html5) perform their own authentication client-side, so the bridge
+	// stays byte-transparent for them.
+	password := ""
+	if ep.Kind == vncendpoint.KindVNC {
+		secret := srv.cfg.VncSecret
+		if secret == "" {
+			secret = srv.cfg.Token
+		}
+		pw, derr := vnccrypt.Decrypt(secret, ep.PasswordEnc)
+		if derr != nil {
+			log.Warn().Err(derr).Msgf("vnc: cannot decrypt password for endpoint %d", ep.ID)
+		} else {
+			password = pw
+		}
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -123,7 +130,7 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 		logID = cont.DeviceLogSvc.StartRemoteVncSession(
 			c.Request.Context(), ep.ViaDevice, ep.Name, actorID, actorName, c.ClientIP(), ep.Addr)
 		if cont.NotificationSvc != nil {
-			cont.NotificationSvc.NotifyRemoteAccess("VNC", ep.ViaDevice, ep.Name, actorName, c.ClientIP())
+			cont.NotificationSvc.NotifyRemoteAccess(strings.ToUpper(string(ep.Kind)), ep.ViaDevice, ep.Name, actorName, c.ClientIP())
 		}
 	}
 	defer func() {
