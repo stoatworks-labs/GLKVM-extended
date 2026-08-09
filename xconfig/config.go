@@ -59,6 +59,15 @@ type Config struct {
     WebrtcPort           string
     WebrtcUsername       string
     WebrtcPassword       string
+    // VncDirectAllowlist restricts which hosts a direct-dial (non-tunnelled)
+    // VNC endpoint may reach, as a list of CIDRs. Empty = allow all (a
+    // warning is logged at startup). Tunnelled endpoints are exempt because
+    // they can only reach the tunnel device's LAN.
+    VncDirectAllowlist []string
+    // VncSecret is the key used to encrypt per-endpoint VNC passwords at
+    // rest (AES-GCM). Falls back to Token when unset; if both are empty,
+    // storing a password is refused (fail closed).
+    VncSecret string
     // // LDAP Configuration
     LdapEnabled       bool
     LdapServer        string
@@ -195,6 +204,13 @@ func parseYamlCfg(cfg *Config, conf string) error {
     getConfigOpt(yamlCfg, "webrtc-username", &cfg.WebrtcUsername)
     getConfigOpt(yamlCfg, "webrtc-password", &cfg.WebrtcPassword)
 
+    var vncAllowlist string
+    getConfigOpt(yamlCfg, "vnc-direct-allowlist", &vncAllowlist)
+    if vncAllowlist != "" {
+        cfg.VncDirectAllowlist = splitScopes(vncAllowlist)
+    }
+    getConfigOpt(yamlCfg, "vnc-secret", &cfg.VncSecret)
+
     // LDAP配置 (LDAP Configuration)
     getConfigOpt(yamlCfg, "ldap-enabled", &cfg.LdapEnabled)
     getConfigOpt(yamlCfg, "ldap-server", &cfg.LdapServer)
@@ -280,6 +296,20 @@ func applyEnvCfg(cfg *Config) error {
 
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG")); v != "" {
         cfg.LogPath = v
+    }
+    // Certificate paths default to the docker image's fixed mount; allow
+    // overriding when running outside the container.
+    if v := strings.TrimSpace(os.Getenv("GLKVM_SSL_CERT")); v != "" {
+        cfg.SslCert = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_SSL_KEY")); v != "" {
+        cfg.SslKey = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_VNC_DIRECT_ALLOWLIST")); v != "" {
+        cfg.VncDirectAllowlist = splitScopes(v)
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_VNC_SECRET")); v != "" {
+        cfg.VncSecret = v
     }
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG_LEVEL")); v != "" {
         cfg.LogLevel = v

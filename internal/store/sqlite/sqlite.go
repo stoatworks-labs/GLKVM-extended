@@ -127,7 +127,37 @@ func InitSchema(ctx context.Context, db *sql.DB, schemaPath string) error {
     if err := ensureDeviceEventLogsTable(ctx, db); err != nil {
         return err
     }
+    if err := ensureVncEndpointsTable(ctx, db); err != nil {
+        return err
+    }
     return ensureNotificationTables(ctx, db)
+}
+
+func ensureVncEndpointsTable(ctx context.Context, db *sql.DB) error {
+    if db == nil {
+        return nil
+    }
+    if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS vnc_endpoints (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL DEFAULT '',
+  addr        TEXT    NOT NULL,
+  via_device  TEXT    NOT NULL DEFAULT '',
+  description TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+)`); err != nil {
+        return err
+    }
+    // password_enc holds the AES-GCM ciphertext of the VNC password (base64),
+    // or '' when the endpoint has no stored credential. Added via ALTER so
+    // existing databases migrate in place.
+    if _, err := db.ExecContext(ctx,
+        `ALTER TABLE vnc_endpoints ADD COLUMN password_enc TEXT NOT NULL DEFAULT ''`); err != nil {
+        if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+            return err
+        }
+    }
+    return nil
 }
 
 func ensureNotificationTables(ctx context.Context, db *sql.DB) error {

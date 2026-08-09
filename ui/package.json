@@ -18,6 +18,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@novnc/novnc": "1.4.0",
     "@types/qrcode": "^1.5.6",
     "@vue/eslint-config-typescript": "12.0.0",
     "@xterm/addon-fit": "0.10.0",

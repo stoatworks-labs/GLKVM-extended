@@ -50,6 +50,13 @@ const router = createRouter({
             name: 'rtty',
             props: true,
         },
+        /** VNC 查看器 */
+        {
+            path: '/vnc-view/:id',
+            component: () => import('@/views/vnc/vncViewerPage.vue'),
+            name: 'vncViewer',
+            props: true,
+        },
         /** 非白名单页 */
         {
             path: '/',
@@ -77,6 +84,18 @@ const router = createRouter({
                         menu: true,
                         title: 'device.deviceGroup',
                         icon: 'gl-icon-device-group',
+                    },
+                },
+                /** VNC 端点列表 */
+                {
+                    path: '/vnc',
+                    component: () => import('@/views/vnc/vncPage.vue'),
+                    name: 'vnc',
+                    meta: {
+                        menu: true,
+                        title: 'vnc.title',
+                        icon: 'gl-npm-grid',
+                        permission: PermissionEnum.VNC_ENDPOINT_READ,
                     },
                 },
                 /** 用户管理页 */

@@ -31,6 +31,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"rttys/internal/domain/device"
 	"rttys/internal/domain/devicelog"
@@ -66,12 +67,29 @@ var sessionStore *memory.SessionStore
 
 const defaultDBPath = "/home/database/glkvm-cloud.db"
 
+// dbPath returns the sqlite database path, overridable via GLKVM_DB_PATH
+// (useful outside the docker image, where /home/database does not exist).
+func dbPath() string {
+	if v := strings.TrimSpace(os.Getenv("GLKVM_DB_PATH")); v != "" {
+		return v
+	}
+	return defaultDBPath
+}
+
+// schemaPath returns the schema.sql path, overridable via GLKVM_SCHEMA_PATH.
+func schemaPath() string {
+	if v := strings.TrimSpace(os.Getenv("GLKVM_SCHEMA_PATH")); v != "" {
+		return v
+	}
+	return "/home/database/schema.sql"
+}
+
 func InitAppContainer(r *gin.Engine) (*AppContainer, error) {
 	ctx := context.Background()
 	cfg := xconfig.Must()
 	// --- DB ---
 	appDB, err := sqlite.Open(ctx, sqlite.Options{
-		DSN: defaultDBPath,
+		DSN: dbPath(),
 		// WAL (set via DSN pragmas) lets reads run concurrently with the single
 		// writer, so a wider pool serves API reads without blocking on device
 		// registration writes.
@@ -84,7 +102,7 @@ func InitAppContainer(r *gin.Engine) (*AppContainer, error) {
 	}
 	deviceMetaRepo := sqlite.NewDeviceMetaRepo(appDB.Gorm())
 
-	if err := sqlite.InitSchema(ctx, appDB.SQL(), "/home/database/schema.sql"); err != nil {
+	if err := sqlite.InitSchema(ctx, appDB.SQL(), schemaPath()); err != nil {
 		log.Fatal().Err(err).Msg("init schema failed")
 	}
 	if err := ensureAdminUser(ctx, appDB.Gorm(), cfg.AdminName, cfg.Password); err != nil {
@@ -97,6 +115,7 @@ func InitAppContainer(r *gin.Engine) (*AppContainer, error) {
 	deviceRepo := sqlite.NewDeviceRepo(appDB.Gorm())
 	relationsRepo := sqlite.NewRelationsRepo(appDB.Gorm())
 	trustedDeviceRepo := sqlite.NewTrustedDeviceRepo(appDB.Gorm())
+	vncEndpointRepo := sqlite.NewVncEndpointRepo(appDB.Gorm())
 	deviceLogRepo := sqlite.NewDeviceLogRepo(appDB.Gorm())
 	notificationRepo := sqlite.NewNotificationRepo(appDB.Gorm())
 
@@ -120,6 +139,7 @@ func InitAppContainer(r *gin.Engine) (*AppContainer, error) {
 		TrustedDeviceRepo: trustedDeviceRepo,
 		DeviceLogSvc:      deviceLogSvc,
 		NotificationSvc:   notificationSvc,
+		VncEndpointRepo:   vncEndpointRepo,
 		Cfg:               cfg,
 		CloudVersion:      KVMCloudVersion,
 	})
@@ -264,6 +284,14 @@ func (srv *RttyServer) ListenAPI() error {
 		httpProxyRedirect(srv, c, "")
 	})
 
+	authorized.GET("/connect-vnc/:id", func(c *gin.Context) {
+		if !callUserHookUrl(cfg, c) {
+			c.Status(http.StatusForbidden)
+			return
+		}
+		handleVncConnection(srv, c)
+	})
+
 	container, err := InitAppContainer(r)
 	if err != nil {
 		return err
@@ -275,6 +303,7 @@ func (srv *RttyServer) ListenAPI() error {
 		DeviceLogSvc:    container.DeviceLogSvc,
 		UserSvc:         container.UserSvc,
 		NotificationSvc: container.NotificationSvc,
+		VncEndpointRepo: sqlite.NewVncEndpointRepo(container.DB.Gorm()),
 	})
 
 	// ===== 添加OIDC路由 =====

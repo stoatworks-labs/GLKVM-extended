@@ -26,11 +26,13 @@ func NewPermissionRepo() *PermissionRepo {
                 permission.RelationWrite,
                 permission.DeviceLogRead,
                 permission.NotificationRead, permission.NotificationWrite,
+                permission.VncEndpointRead, permission.VncEndpointWrite,
             },
             identity.RoleUser: {
                 permission.MeRead, permission.AuthWrite,
                 permission.DeviceRead,
                 permission.DeviceGroupRead, permission.UserGroupRead,
+                permission.VncEndpointRead,
             },
         },
     }

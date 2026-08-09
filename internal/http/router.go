@@ -29,6 +29,7 @@ type Deps struct {
     TrustedDeviceRepo *sqlite.TrustedDeviceRepo
     DeviceLogSvc      *devicelog.Service
     NotificationSvc   *notification.Service
+    VncEndpointRepo   *sqlite.VncEndpointRepo
     Cfg               *xconfig.Config
     CloudVersion      string
 }
@@ -160,6 +161,17 @@ func RegisterAPIRoutes(r *gin.Engine, d Deps) {
     api.DELETE("/device-groups/:id", middleware.Require(permission.DeviceGroupWrite), dgH.Delete)
     api.POST("/device-groups/:id/devices", middleware.Require(permission.DeviceGroupWrite), dgH.AddDevices)
     api.DELETE("/device-groups/:id/devices", middleware.Require(permission.DeviceGroupWrite), dgH.RemoveDevices)
+
+    // VNC endpoints (list/connect for all users, manage admin only)
+    vncSecret := cfg.VncSecret
+    if vncSecret == "" {
+        vncSecret = cfg.Token
+    }
+    vncH := handler.NewVncEndpointHandler(d.VncEndpointRepo, vncSecret, cfg.VncDirectAllowlist)
+    api.GET("/vnc-endpoints", middleware.Require(permission.VncEndpointRead), vncH.List)
+    api.POST("/vnc-endpoints", middleware.Require(permission.VncEndpointWrite), vncH.Create)
+    api.PUT("/vnc-endpoints/:id", middleware.Require(permission.VncEndpointWrite), vncH.Update)
+    api.DELETE("/vnc-endpoints/:id", middleware.Require(permission.VncEndpointWrite), vncH.Delete)
 
     // device event logs (admin only)
     api.GET("/device-event-logs", middleware.Require(permission.DeviceLogRead), devLogH.List)

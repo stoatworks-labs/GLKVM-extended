@@ -26,6 +26,9 @@ const (
 
     NotificationRead  Key = "notification.read"
     NotificationWrite Key = "notification.write"
+
+    VncEndpointRead  Key = "vnc_endpoint.read"
+    VncEndpointWrite Key = "vnc_endpoint.write"
 )
 
 func DefaultKeysForRole(role identity.Role) []Key {
