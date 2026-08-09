@@ -9,12 +9,13 @@ const (
 	EventRemoteSSH      EventType = "remote_ssh"
 	EventRemoteWeb      EventType = "remote_web"
 	EventRemoteControl  EventType = "remote_control"
+	EventRemoteVNC      EventType = "remote_vnc"
 )
 
 // IsSession reports whether the event represents a long-running session
 // (SSH / Web / Control) for which we track both started_at and ended_at.
 func (e EventType) IsSession() bool {
-	return e == EventRemoteSSH || e == EventRemoteWeb || e == EventRemoteControl
+	return e == EventRemoteSSH || e == EventRemoteWeb || e == EventRemoteControl || e == EventRemoteVNC
 }
 
 // Log is a single device event row.

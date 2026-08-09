@@ -281,6 +281,14 @@ func applyEnvCfg(cfg *Config) error {
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG")); v != "" {
         cfg.LogPath = v
     }
+    // Certificate paths default to the docker image's fixed mount; allow
+    // overriding when running outside the container.
+    if v := strings.TrimSpace(os.Getenv("GLKVM_SSL_CERT")); v != "" {
+        cfg.SslCert = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_SSL_KEY")); v != "" {
+        cfg.SslKey = v
+    }
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG_LEVEL")); v != "" {
         cfg.LogLevel = v
     }

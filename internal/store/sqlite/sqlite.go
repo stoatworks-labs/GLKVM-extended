@@ -127,7 +127,26 @@ func InitSchema(ctx context.Context, db *sql.DB, schemaPath string) error {
     if err := ensureDeviceEventLogsTable(ctx, db); err != nil {
         return err
     }
+    if err := ensureVncEndpointsTable(ctx, db); err != nil {
+        return err
+    }
     return ensureNotificationTables(ctx, db)
+}
+
+func ensureVncEndpointsTable(ctx context.Context, db *sql.DB) error {
+    if db == nil {
+        return nil
+    }
+    _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS vnc_endpoints (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL DEFAULT '',
+  addr        TEXT    NOT NULL,
+  via_device  TEXT    NOT NULL DEFAULT '',
+  description TEXT    NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+)`)
+    return err
 }
 
 func ensureNotificationTables(ctx context.Context, db *sql.DB) error {

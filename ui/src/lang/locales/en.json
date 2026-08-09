@@ -372,5 +372,30 @@
     "removeRecipientConfirm": "Remove this recipient?",
     "noRecipients": "No recipients added yet.",
     "invalidEmail": "Invalid email address."
+  },
+  "vnc": {
+    "title": "VNC Endpoints",
+    "addEndpoint": "Add Endpoint",
+    "editEndpoint": "Edit Endpoint",
+    "name": "Name",
+    "addr": "Address",
+    "addrTip": "VNC server address as host:port, e.g. 192.168.1.50:5900. Tunnelled endpoints require an IPv4 address.",
+    "viaDevice": "Via Device",
+    "viaDeviceTip": "Optional: tunnel through a device’s connection to reach a VNC server on its LAN. Leave empty to connect directly from the cloud.",
+    "description": "Description",
+    "actions": "Actions",
+    "connect": "Connect",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this endpoint?",
+    "direct": "Direct",
+    "requiredTip": "Name and address are required",
+    "connecting": "Connecting…",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connectFailed": "Connection failed",
+    "reconnect": "Reconnect",
+    "passwordRequired": "VNC Password Required",
+    "password": "Password"
   }
 }

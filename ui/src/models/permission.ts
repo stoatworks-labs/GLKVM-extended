@@ -31,4 +31,8 @@ export enum PermissionEnum {
   NOTIFICATION_READ = 'notification.read',
   /** 编辑通知设置 (admin only) */
   NOTIFICATION_WRITE = 'notification.write',
+  /** 查看/连接VNC端点 */
+  VNC_ENDPOINT_READ = 'vnc_endpoint.read',
+  /** 创建 / 编辑 / 删除VNC端点 (admin only) */
+  VNC_ENDPOINT_WRITE = 'vnc_endpoint.write',
 }

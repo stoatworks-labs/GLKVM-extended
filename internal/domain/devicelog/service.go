@@ -193,6 +193,30 @@ func (s *Service) StartRemoteControlSession(ctx context.Context, deviceID, mac s
 	return id
 }
 
+// StartRemoteVncSession records the start of a VNC session to a standalone
+// endpoint. deviceID is the tunnel device id, or "" for a direct connection.
+func (s *Service) StartRemoteVncSession(ctx context.Context, deviceID, mac string, userID int64, userName, ip, addr string) int64 {
+	if s == nil || s.repo == nil {
+		return 0
+	}
+	detail := encodeDetail(map[string]string{"addr": addr, "proto": "vnc"})
+	id, err := s.repo.Create(ctx, &Log{
+		DeviceID:    deviceID,
+		DeviceMac:   normalizeMac(mac),
+		EventType:   EventRemoteVNC,
+		ActorUserID: userID,
+		ActorName:   userName,
+		ClientIP:    ip,
+		Detail:      detail,
+		CreatedAt:   time.Now().Unix(),
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("device", deviceID).Msg("devicelog: start vnc session failed")
+		return 0
+	}
+	return id
+}
+
 // EndSession stamps ended_at on a session row. Safe to call with id == 0
 // (no-op) so callers can write `defer logSvc.EndSession(ctx, id)` without
 // branching on whether the start succeeded.
