@@ -7,6 +7,8 @@ on:
 
 jobs:
   docker:
+    # Upstream-only: pushes to the upstream author's Docker Hub. Skip on forks.
+    if: github.repository == 'zhaojh329/rttys'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -49,23 +51,15 @@ jobs:
           npm run build
           cd ..
 
-      - name: Build rttys release
+      - name: Build ui and cross-compiled binaries
         run: |
-          sudo apt-get install -y ruby ruby-dev rubygems build-essential
-          sudo gem install --no-document fpm
-          ./build-deb.sh amd64
-          ./build-deb.sh arm64
-          COMPRESS=1 ./build.sh linux amd64
-          COMPRESS=1 ./build.sh linux arm64
-          COMPRESS=1 ./build.sh windows amd64
+          make ui
+          make build-linux-amd64 build-linux-arm64
 
       - name: Upload Release Asset
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            rttys_${{ steps.get-version.outputs.version-without-v }}_amd64.deb
-            rttys_${{ steps.get-version.outputs.version-without-v }}_arm64.deb
-            rttys-${{ steps.get-version.outputs.version-without-v }}-linux-amd64.tar.bz2
-            rttys-${{ steps.get-version.outputs.version-without-v }}-linux-arm64.tar.bz2
-            rttys-${{ steps.get-version.outputs.version-without-v }}-windows-amd64.tar.bz2
+            dist/rttys-linux-amd64
+            dist/rttys-linux-arm64
           draft: true
