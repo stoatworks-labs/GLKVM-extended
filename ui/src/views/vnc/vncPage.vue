@@ -13,6 +13,9 @@
                 :loading="state.loading"
                 :pagination="false"
             >
+                <template #kind="{ record }">
+                    <span class="vnc-kind">{{ (record.kind || 'vnc').toUpperCase() }}</span>
+                </template>
                 <template #viaDevice="{ record }">
                     <span v-if="record.viaDevice">{{ record.viaDevice }}</span>
                     <span v-else class="vnc-direct">{{ $t('vnc.direct') }}</span>
@@ -54,8 +57,11 @@
                 <AFormItem :label="$t('vnc.name')" required>
                     <AInput v-model:value="form.name" :maxlength="64" />
                 </AFormItem>
+                <AFormItem :label="$t('vnc.kind')" :extra="$t('vnc.kindTip')">
+                    <ASelect v-model:value="form.kind" :options="kindOptions" />
+                </AFormItem>
                 <AFormItem :label="$t('vnc.addr')" required :extra="$t('vnc.addrTip')">
-                    <AInput v-model:value="form.addr" placeholder="192.168.1.50:5900" />
+                    <AInput v-model:value="form.addr" :placeholder="addrPlaceholder" />
                 </AFormItem>
                 <AFormItem :label="$t('vnc.viaDevice')" :extra="$t('vnc.viaDeviceTip')">
                     <ASelect
@@ -69,7 +75,7 @@
                 <AFormItem :label="$t('vnc.description')">
                     <AInput v-model:value="form.description" :maxlength="128" />
                 </AFormItem>
-                <AFormItem :label="$t('vnc.password')" :extra="$t('vnc.passwordTip')">
+                <AFormItem v-if="form.kind === 'vnc'" :label="$t('vnc.password')" :extra="$t('vnc.passwordTip')">
                     <AInput
                         v-model:value="passwordInput"
                         type="password"
@@ -84,6 +90,9 @@
                     >
                         {{ $t('vnc.passwordClear') }}
                     </ACheckbox>
+                </AFormItem>
+                <AFormItem v-else>
+                    <div class="hint">{{ $t('vnc.credClientSide') }}</div>
                 </AFormItem>
             </AForm>
         </BaseModal>
@@ -119,10 +128,20 @@ const state = reactive({
 
 const form = reactive<VncEndpointForm>({
     name: '',
+    kind: 'vnc',
     addr: '',
     viaDevice: '',
     description: '',
 })
+
+const kindOptions = [
+    { label: 'VNC', value: 'vnc' },
+    { label: 'RDP', value: 'rdp' },
+    { label: 'X (xpra)', value: 'xpra' },
+]
+
+const defaultPorts: Record<string, string> = { vnc: '5900', rdp: '3389', xpra: '10000' }
+const addrPlaceholder = computed(() => `192.168.1.50:${defaultPorts[form.kind] || '5900'}`)
 
 // Password is tracked outside `form` so we can distinguish "leave unchanged"
 // (empty input) from "clear" (checkbox) from "set" (typed value).
@@ -131,6 +150,7 @@ const clearPassword = ref(false)
 
 const columns = computed(() => [
     { title: t('vnc.name'), dataIndex: 'name' },
+    { title: t('vnc.kind'), dataIndex: 'kind', width: 90 },
     { title: t('vnc.addr'), dataIndex: 'addr' },
     { title: t('vnc.viaDevice'), dataIndex: 'viaDevice' },
     { title: t('vnc.password'), dataIndex: 'hasPassword', width: 110 },
@@ -169,6 +189,7 @@ const openAdd = () => {
     state.editingId = 0
     state.editingHasPassword = false
     form.name = ''
+    form.kind = 'vnc'
     form.addr = ''
     form.viaDevice = ''
     form.description = ''
@@ -180,6 +201,7 @@ const openEdit = (record: VncEndpoint) => {
     state.editingId = record.id
     state.editingHasPassword = record.hasPassword
     form.name = record.name
+    form.kind = record.kind || 'vnc'
     form.addr = record.addr
     form.viaDevice = record.viaDevice
     form.description = record.description
@@ -195,6 +217,7 @@ const handleApply: OnBeforeOk = (done) => {
     }
     const data: VncEndpointForm = {
         name: form.name,
+        kind: form.kind,
         addr: form.addr.trim(),
         viaDevice: form.viaDevice || '',
         description: form.description,
@@ -223,7 +246,8 @@ const remove = async (record: VncEndpoint) => {
 }
 
 const connect = (record: VncEndpoint) => {
-    window.open(`/#/vnc-view/${record.id}`)
+    const route = { vnc: 'vnc-view', rdp: 'rdp-view', xpra: 'xpra-view' }[record.kind || 'vnc']
+    window.open(`/#/${route}/${record.id}`)
 }
 
 onMounted(() => {
@@ -259,6 +283,20 @@ onMounted(() => {
     }
 
     .vnc-direct {
+        color: var(--gl-color-text-tertiary, #999);
+    }
+
+    .vnc-kind {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--gl-color-bg-surface2, #333);
+    }
+
+    .hint {
+        font-size: 12px;
         color: var(--gl-color-text-tertiary, #999);
     }
 }

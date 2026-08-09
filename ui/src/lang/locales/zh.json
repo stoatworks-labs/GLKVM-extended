@@ -401,6 +401,12 @@
     "passwordSet": "输入 VNC 密码（可选）",
     "passwordKeep": "留空则保留已存储的密码",
     "passwordClear": "删除已存储的密码",
-    "stored": "已存储"
+    "stored": "已存储",
+    "kind": "协议",
+    "kindTip": "VNC、RDP 或 X (xpra)。三者共用同一条安全隧道，仅浏览器端客户端不同。",
+    "credClientSide": "RDP/X 的凭据在连接时于查看器中输入，不会存储在服务器上。",
+    "rdpConnecting": "正在启动 RDP 会话…",
+    "xpraConnecting": "正在启动 X 会话…",
+    "unsupported": "查看器加载失败。"
   }
 }
