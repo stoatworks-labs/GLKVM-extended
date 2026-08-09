@@ -396,6 +396,11 @@
     "connectFailed": "Connection failed",
     "reconnect": "Reconnect",
     "passwordRequired": "VNC Password Required",
-    "password": "Password"
+    "password": "Password",
+    "passwordTip": "Stored encrypted on the server and injected into the VNC handshake — the browser never sees it. Leave blank to keep the current setting.",
+    "passwordSet": "Enter a VNC password (optional)",
+    "passwordKeep": "Leave blank to keep the stored password",
+    "passwordClear": "Remove the stored password",
+    "stored": "Stored"
   }
 }

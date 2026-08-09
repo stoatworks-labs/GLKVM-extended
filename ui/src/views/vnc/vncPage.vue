@@ -17,6 +17,10 @@
                     <span v-if="record.viaDevice">{{ record.viaDevice }}</span>
                     <span v-else class="vnc-direct">{{ $t('vnc.direct') }}</span>
                 </template>
+                <template #hasPassword="{ record }">
+                    <span v-if="record.hasPassword" class="vnc-lock">🔒 {{ $t('vnc.stored') }}</span>
+                    <span v-else class="vnc-direct">—</span>
+                </template>
                 <template #action="{ record }">
                     <div class="vnc-actions">
                         <a-button type="primary" size="small" @click="connect(record)">
@@ -65,13 +69,29 @@
                 <AFormItem :label="$t('vnc.description')">
                     <AInput v-model:value="form.description" :maxlength="128" />
                 </AFormItem>
+                <AFormItem :label="$t('vnc.password')" :extra="$t('vnc.passwordTip')">
+                    <AInput
+                        v-model:value="passwordInput"
+                        type="password"
+                        autocomplete="new-password"
+                        :disabled="clearPassword"
+                        :placeholder="state.editingHasPassword ? $t('vnc.passwordKeep') : $t('vnc.passwordSet')"
+                    />
+                    <ACheckbox
+                        v-if="state.editingHasPassword"
+                        v-model:checked="clearPassword"
+                        style="margin-top: 8px"
+                    >
+                        {{ $t('vnc.passwordClear') }}
+                    </ACheckbox>
+                </AFormItem>
             </AForm>
         </BaseModal>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useI18n } from 'vue-i18n'
 import { BaseText } from 'gl-web-main/components'
@@ -93,6 +113,7 @@ const state = reactive({
     loading: false,
     dialogOpen: false,
     editingId: 0,
+    editingHasPassword: false,
     deviceOptions: [] as { label: string, value: string }[],
 })
 
@@ -103,10 +124,16 @@ const form = reactive<VncEndpointForm>({
     description: '',
 })
 
+// Password is tracked outside `form` so we can distinguish "leave unchanged"
+// (empty input) from "clear" (checkbox) from "set" (typed value).
+const passwordInput = ref('')
+const clearPassword = ref(false)
+
 const columns = computed(() => [
     { title: t('vnc.name'), dataIndex: 'name' },
     { title: t('vnc.addr'), dataIndex: 'addr' },
     { title: t('vnc.viaDevice'), dataIndex: 'viaDevice' },
+    { title: t('vnc.password'), dataIndex: 'hasPassword', width: 110 },
     { title: t('vnc.description'), dataIndex: 'description' },
     { title: t('vnc.actions'), dataIndex: 'action', width: 260 },
 ])
@@ -133,21 +160,30 @@ const loadDeviceOptions = async () => {
     }
 }
 
+const resetPassword = () => {
+    passwordInput.value = ''
+    clearPassword.value = false
+}
+
 const openAdd = () => {
     state.editingId = 0
+    state.editingHasPassword = false
     form.name = ''
     form.addr = ''
     form.viaDevice = ''
     form.description = ''
+    resetPassword()
     state.dialogOpen = true
 }
 
 const openEdit = (record: VncEndpoint) => {
     state.editingId = record.id
+    state.editingHasPassword = record.hasPassword
     form.name = record.name
     form.addr = record.addr
     form.viaDevice = record.viaDevice
     form.description = record.description
+    resetPassword()
     state.dialogOpen = true
 }
 
@@ -162,6 +198,12 @@ const handleApply: OnBeforeOk = (done) => {
         addr: form.addr.trim(),
         viaDevice: form.viaDevice || '',
         description: form.description,
+    }
+    // password: clear checkbox -> ""; typed value -> set; otherwise omit (keep).
+    if (clearPassword.value) {
+        data.password = ''
+    } else if (passwordInput.value !== '') {
+        data.password = passwordInput.value
     }
     const req = state.editingId
         ? reqEditVncEndpoint(state.editingId, data)

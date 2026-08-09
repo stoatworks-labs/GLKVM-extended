@@ -20,6 +20,7 @@ type vncEndpointRow struct {
 	Addr        string `gorm:"column:addr"`
 	ViaDevice   string `gorm:"column:via_device"`
 	Description string `gorm:"column:description"`
+	PasswordEnc string `gorm:"column:password_enc"`
 	CreatedAt   int64  `gorm:"column:created_at"`
 	UpdatedAt   int64  `gorm:"column:updated_at"`
 }
@@ -33,6 +34,8 @@ func (r vncEndpointRow) toDomain() *vncendpoint.Endpoint {
 		Addr:        r.Addr,
 		ViaDevice:   r.ViaDevice,
 		Description: r.Description,
+		PasswordEnc: r.PasswordEnc,
+		HasPassword: r.PasswordEnc != "",
 		CreatedAt:   r.CreatedAt,
 		UpdatedAt:   r.UpdatedAt,
 	}
@@ -69,6 +72,7 @@ func (r *VncEndpointRepo) Create(ctx context.Context, e *vncendpoint.Endpoint) (
 		Addr:        e.Addr,
 		ViaDevice:   e.ViaDevice,
 		Description: e.Description,
+		PasswordEnc: e.PasswordEnc,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -82,11 +86,12 @@ func (r *VncEndpointRepo) Update(ctx context.Context, e *vncendpoint.Endpoint) e
 	return r.db.WithContext(ctx).Model(&vncEndpointRow{}).
 		Where("id = ?", e.ID).
 		Updates(map[string]any{
-			"name":        e.Name,
-			"addr":        e.Addr,
-			"via_device":  e.ViaDevice,
-			"description": e.Description,
-			"updated_at":  time.Now().Unix(),
+			"name":         e.Name,
+			"addr":         e.Addr,
+			"via_device":   e.ViaDevice,
+			"description":  e.Description,
+			"password_enc": e.PasswordEnc,
+			"updated_at":   time.Now().Unix(),
 		}).Error
 }
 

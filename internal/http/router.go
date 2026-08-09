@@ -163,7 +163,11 @@ func RegisterAPIRoutes(r *gin.Engine, d Deps) {
     api.DELETE("/device-groups/:id/devices", middleware.Require(permission.DeviceGroupWrite), dgH.RemoveDevices)
 
     // VNC endpoints (list/connect for all users, manage admin only)
-    vncH := handler.NewVncEndpointHandler(d.VncEndpointRepo)
+    vncSecret := cfg.VncSecret
+    if vncSecret == "" {
+        vncSecret = cfg.Token
+    }
+    vncH := handler.NewVncEndpointHandler(d.VncEndpointRepo, vncSecret, cfg.VncDirectAllowlist)
     api.GET("/vnc-endpoints", middleware.Require(permission.VncEndpointRead), vncH.List)
     api.POST("/vnc-endpoints", middleware.Require(permission.VncEndpointWrite), vncH.Create)
     api.PUT("/vnc-endpoints/:id", middleware.Require(permission.VncEndpointWrite), vncH.Update)

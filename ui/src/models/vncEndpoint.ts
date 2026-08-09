@@ -7,6 +7,8 @@ export interface VncEndpoint {
     /** 通过哪个设备隧道转发，空为云端直连 */
     viaDevice: string
     description: string
+    /** 是否已存储VNC密码（明文永不返回） */
+    hasPassword: boolean
     createdAt: number
     updatedAt: number
 }
@@ -16,4 +18,6 @@ export interface VncEndpointForm {
     addr: string
     viaDevice: string
     description: string
+    /** 省略 = 不变；空字符串 = 清除；有值 = 设置 */
+    password?: string
 }

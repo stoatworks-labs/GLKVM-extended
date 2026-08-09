@@ -2,13 +2,16 @@ package server
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"rttys/internal/pkg/vnccrypt"
 	"rttys/internal/store/sqlite"
+	"rttys/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -16,9 +19,15 @@ import (
 )
 
 // VNC bridge: relays RFB between a browser-side noVNC WebSocket and a VNC
-// server, either dialled directly by the cloud or tunnelled through a
-// device's rtty connection (the same msgTypeHttp raw-TCP proxy the web
-// proxy uses — both directions are byte-transparent, so RFB passes as-is).
+// server. Both transports expose the server as a net.Conn:
+//   - direct: the cloud dials the server (net.Dial), gated by an optional
+//     CIDR allowlist.
+//   - tunnel: the connection rides a device's rtty link via the msgTypeHttp
+//     raw-TCP proxy (byte-transparent, so RFB passes as-is).
+//
+// When the endpoint has a stored password, an RFB auth-proxy terminates VNC
+// Authentication toward the server and presents "None" toward the browser,
+// so the password never leaves the cloud.
 
 const vncDialTimeout = 10 * time.Second
 
@@ -26,11 +35,16 @@ const vncDialTimeout = 10 * time.Second
 // limit of the rtty framing (and matches the web proxy's read size).
 const vncChunkSize = 4096
 
-// wsWriter serialises writes to a websocket connection, since both the
-// backend reader and control paths may write concurrently.
+// wsWriter serialises writes to a websocket connection.
 type wsWriter struct {
 	mu   sync.Mutex
 	conn *websocket.Conn
+}
+
+func (w *wsWriter) writeBinary(p []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.conn.WriteMessage(websocket.BinaryMessage, p)
 }
 
 func handleVncConnection(srv *RttyServer, c *gin.Context) {
@@ -59,8 +73,8 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 		return
 	}
 
-	// Resolve the transport before upgrading so connection errors surface
-	// as HTTP statuses the frontend can distinguish.
+	// Resolve the transport before upgrading so errors surface as HTTP
+	// statuses the frontend can distinguish.
 	var dev *Device
 	if ep.ViaDevice != "" {
 		dev = srv.GetDevice(c.Query("group"), ep.ViaDevice)
@@ -68,6 +82,31 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 			c.Status(http.StatusBadGateway) // tunnel device offline
 			return
 		}
+	} else {
+		// Direct dial: enforce the CIDR allowlist before doing anything.
+		host, _, splitErr := net.SplitHostPort(ep.Addr)
+		if splitErr != nil {
+			c.Status(http.StatusBadRequest)
+			return
+		}
+		allow := utils.ParseCIDRs(srv.cfg.VncDirectAllowlist)
+		if !utils.HostAllowed(allow, host) {
+			log.Warn().Msgf("vnc: direct dial to %s blocked by allowlist", ep.Addr)
+			c.Status(http.StatusForbidden)
+			return
+		}
+	}
+
+	// Decrypt the stored password (if any). A key mismatch is logged and the
+	// session proceeds without injection (noVNC will prompt).
+	secret := srv.cfg.VncSecret
+	if secret == "" {
+		secret = srv.cfg.Token
+	}
+	password, derr := vnccrypt.Decrypt(secret, ep.PasswordEnc)
+	if derr != nil {
+		log.Warn().Err(derr).Msgf("vnc: cannot decrypt password for endpoint %d", ep.ID)
+		password = ""
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -93,30 +132,46 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 		}
 	}()
 
+	// Build the server-facing net.Conn for the chosen transport.
+	var server net.Conn
 	if dev != nil {
-		vncTunnelBridge(dev, ep.Addr, conn)
+		server = dialVncTunnel(dev, ep.Addr)
+		if server == nil {
+			return
+		}
 	} else {
-		vncDirectBridge(ep.Addr, conn)
+		tcp, derr := net.DialTimeout("tcp", ep.Addr, vncDialTimeout)
+		if derr != nil {
+			log.Warn().Err(derr).Msgf("vnc: direct dial %s failed", ep.Addr)
+			return
+		}
+		server = tcp
 	}
+	defer server.Close()
+
+	vncRelay(server, conn, password)
 }
 
-// vncDirectBridge dials the VNC server from the cloud host.
-func vncDirectBridge(addr string, ws *websocket.Conn) {
-	tcp, err := net.DialTimeout("tcp", addr, vncDialTimeout)
-	if err != nil {
-		log.Warn().Err(err).Msgf("vnc: direct dial %s failed", addr)
-		return
-	}
-	defer tcp.Close()
-
+// vncRelay optionally runs the RFB auth-proxy, then pumps bytes transparently
+// between the VNC server and the browser websocket in both directions.
+func vncRelay(server net.Conn, ws *websocket.Conn, password string) {
 	w := &wsWriter{conn: ws}
+
+	if password != "" {
+		if err := rfbAuthProxy(server, ws, w, password); err != nil {
+			log.Warn().Err(err).Msg("vnc: RFB auth proxy failed")
+			return
+		}
+	}
+
 	done := make(chan struct{}, 2)
 
+	// server -> browser
 	go func() {
 		defer func() { done <- struct{}{} }()
 		buf := make([]byte, 32*1024)
 		for {
-			n, err := tcp.Read(buf)
+			n, err := server.Read(buf)
 			if n > 0 {
 				if werr := w.writeBinary(buf[:n]); werr != nil {
 					return
@@ -128,6 +183,7 @@ func vncDirectBridge(addr string, ws *websocket.Conn) {
 		}
 	}()
 
+	// browser -> server
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
@@ -138,106 +194,110 @@ func vncDirectBridge(addr string, ws *websocket.Conn) {
 			if typ != websocket.BinaryMessage {
 				continue
 			}
-			if _, err := tcp.Write(data); err != nil {
+			if _, err := server.Write(data); err != nil {
 				return
 			}
 		}
 	}()
 
 	<-done
-	// Unblock the peer goroutine.
-	tcp.Close()
+	server.Close()
 	ws.Close()
 	<-done
 }
 
-// vncTunnelConn adapts the device tunnel to the net.Conn the msgTypeHttp
-// return path (handleHttpMsg) expects: Write delivers VNC-server bytes to
-// the browser, Close tears the websocket down.
-type vncTunnelConn struct {
-	w     *wsWriter
-	ws    *websocket.Conn
-	close sync.Once
+// --- tunnel transport as a net.Conn ------------------------------------
+
+// tunnelInbound is stored in dev.https; handleHttpMsg calls Write with bytes
+// arriving from the VNC server and Close when the device drops the socket.
+// It feeds an io.Pipe that tunnelConn.Read drains. It satisfies net.Conn so
+// the existing type assertion in handleHttpMsg holds; only Write/Close are
+// exercised there.
+type tunnelInbound struct {
+	pw        *io.PipeWriter
+	closeOnce sync.Once
 }
 
-func (t *vncTunnelConn) Write(p []byte) (int, error) {
-	if err := t.w.writeBinary(p); err != nil {
-		return 0, err
+func (t *tunnelInbound) Write(p []byte) (int, error) { return t.pw.Write(p) }
+func (t *tunnelInbound) Close() error {
+	t.closeOnce.Do(func() { t.pw.CloseWithError(io.EOF) })
+	return nil
+}
+func (t *tunnelInbound) Read([]byte) (int, error)        { return 0, io.EOF }
+func (t *tunnelInbound) LocalAddr() net.Addr             { return &net.TCPAddr{} }
+func (t *tunnelInbound) RemoteAddr() net.Addr            { return &net.TCPAddr{} }
+func (t *tunnelInbound) SetDeadline(time.Time) error     { return nil }
+func (t *tunnelInbound) SetReadDeadline(time.Time) error { return nil }
+func (t *tunnelInbound) SetWriteDeadline(time.Time) error {
+	return nil
+}
+
+// tunnelConn is the server-facing net.Conn handed to vncRelay: Read drains
+// bytes the device sent back; Write chunks outbound bytes into msgTypeHttp
+// frames toward the device.
+type tunnelConn struct {
+	pr        *io.PipeReader
+	dev       *Device
+	srcAddr   []byte
+	destAddr  []byte
+	closeOnce sync.Once
+}
+
+func (t *tunnelConn) Read(p []byte) (int, error) { return t.pr.Read(p) }
+
+func (t *tunnelConn) Write(p []byte) (int, error) {
+	for len(p) > 0 {
+		n := min(len(p), vncChunkSize)
+		sendHttpReq(t.dev, false, t.srcAddr, t.destAddr, p[:n])
+		p = p[n:]
 	}
 	return len(p), nil
 }
 
-func (t *vncTunnelConn) Close() error {
-	t.close.Do(func() { t.ws.Close() })
+func (t *tunnelConn) Close() error {
+	t.closeOnce.Do(func() {
+		t.dev.https.Delete(string(t.srcAddr))
+		sendHttpReq(t.dev, false, t.srcAddr, t.destAddr, nil) // close device side
+		t.pr.CloseWithError(io.EOF)
+	})
 	return nil
 }
 
-func (t *vncTunnelConn) Read(p []byte) (int, error)       { return 0, net.ErrClosed }
-func (t *vncTunnelConn) LocalAddr() net.Addr              { return &net.TCPAddr{} }
-func (t *vncTunnelConn) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
-func (t *vncTunnelConn) SetDeadline(time.Time) error      { return nil }
-func (t *vncTunnelConn) SetReadDeadline(time.Time) error  { return nil }
-func (t *vncTunnelConn) SetWriteDeadline(time.Time) error { return nil }
+func (t *tunnelConn) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (t *tunnelConn) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (t *tunnelConn) SetDeadline(time.Time) error      { return nil }
+func (t *tunnelConn) SetReadDeadline(time.Time) error  { return nil }
+func (t *tunnelConn) SetWriteDeadline(time.Time) error { return nil }
 
-// vncTunnelBridge relays through the device's rtty connection. The device
-// side (rtty http proxy) dials destAddr on the first frame for an unseen
-// source address — an empty payload still triggers the dial, which matters
+// dialVncTunnel wires a device tunnel as a net.Conn to the VNC server. The
+// device's rtty http proxy dials destAddr on the first frame for an unseen
+// source address; an empty payload still triggers the dial, which matters
 // because RFB servers speak first.
-func vncTunnelBridge(dev *Device, addr string, ws *websocket.Conn) {
+func dialVncTunnel(dev *Device, addr string) net.Conn {
 	destAddr := genDestAddr(addr)
 	if destAddr == nil {
 		log.Warn().Msgf("vnc: invalid tunnel addr %s", addr)
-		return
+		return nil
 	}
-
-	tcpAddr, ok := ws.RemoteAddr().(*net.TCPAddr)
-	if !ok {
-		log.Warn().Msg("vnc: websocket remote addr is not TCP")
-		return
-	}
-	srcAddr := tcpAddr2Bytes(tcpAddr)
+	// A synthetic, unique source address keys this stream on the device.
+	srcAddr := tcpAddr2Bytes(&net.TCPAddr{
+		IP:   net.IPv4(127, 0, 0, 1),
+		Port: int(time.Now().UnixNano() & 0xffff),
+	})
 	key := string(srcAddr)
 
-	w := &wsWriter{conn: ws}
-	tc := &vncTunnelConn{w: w, ws: ws}
+	pr, pw := io.Pipe()
+	dev.https.Store(key, net.Conn(&tunnelInbound{pw: pw}))
 
-	dev.https.Store(key, net.Conn(tc))
-	defer func() {
-		dev.https.Delete(key)
-		// Tell the device to close its side.
-		sendHttpReq(dev, false, srcAddr, destAddr, nil)
-	}()
+	tc := &tunnelConn{pr: pr, dev: dev, srcAddr: srcAddr, destAddr: destAddr}
 
-	// Close the websocket when the device drops.
-	ctx, cancel := context.WithCancel(dev.ctx)
-	defer cancel()
+	// Close the tunnel when the device context ends.
 	go func() {
-		<-ctx.Done()
+		<-dev.ctx.Done()
 		tc.Close()
 	}()
 
-	// Kick off the device-side dial so the VNC server's greeting can flow
-	// before the browser has sent a single byte.
+	// Kick the device-side dial so the server greeting can arrive first.
 	sendHttpReq(dev, false, srcAddr, destAddr, nil)
-
-	for {
-		typ, data, err := ws.ReadMessage()
-		if err != nil {
-			return
-		}
-		if typ != websocket.BinaryMessage {
-			continue
-		}
-		for len(data) > 0 {
-			n := min(len(data), vncChunkSize)
-			sendHttpReq(dev, false, srcAddr, destAddr, data[:n])
-			data = data[n:]
-		}
-	}
-}
-
-func (w *wsWriter) writeBinary(p []byte) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.conn.WriteMessage(websocket.BinaryMessage, p)
+	return tc
 }

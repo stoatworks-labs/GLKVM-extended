@@ -8,17 +8,25 @@ import (
 	"rttys/internal/domain/vncendpoint"
 	"rttys/internal/http/dto"
 	"rttys/internal/http/middleware"
+	"rttys/internal/pkg/vnccrypt"
 	"rttys/internal/store/sqlite"
+	"rttys/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 type VncEndpointHandler struct {
-	repo *sqlite.VncEndpointRepo
+	repo      *sqlite.VncEndpointRepo
+	secret    string
+	allowlist []*net.IPNet
 }
 
-func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo) *VncEndpointHandler {
-	return &VncEndpointHandler{repo: repo}
+func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlist []string) *VncEndpointHandler {
+	return &VncEndpointHandler{
+		repo:      repo,
+		secret:    secret,
+		allowlist: utils.ParseCIDRs(allowlist),
+	}
 }
 
 type vncEndpointReq struct {
@@ -26,12 +34,16 @@ type vncEndpointReq struct {
 	Addr        string `json:"addr"`
 	ViaDevice   string `json:"viaDevice"`
 	Description string `json:"description"`
+	// Password: nil = leave unchanged (update) / none (create); "" = clear;
+	// non-empty = set. Never echoed back.
+	Password *string `json:"password"`
 }
 
 // validateVncAddr checks host:port shape. Tunnelled endpoints must be IPv4
 // literals because the rtty http-proxy frame carries a fixed 4-byte address;
 // direct endpoints may use hostnames (resolved by the cloud at dial time).
-func validateVncAddr(addr, viaDevice string) string {
+// For direct endpoints the host is also checked against the CIDR allowlist.
+func (h *VncEndpointHandler) validateVncAddr(addr, viaDevice string) string {
 	host, portStr, err := net.SplitHostPort(strings.TrimSpace(addr))
 	if err != nil || host == "" {
 		return "addr must be host:port"
@@ -45,8 +57,29 @@ func validateVncAddr(addr, viaDevice string) string {
 		if ip == nil || ip.To4() == nil {
 			return "tunnelled endpoints require an IPv4 address"
 		}
+		return "" // tunnelled endpoints are exempt from the allowlist
+	}
+	if !utils.HostAllowed(h.allowlist, host) {
+		return "address is outside the permitted range (vnc-direct-allowlist)"
 	}
 	return ""
+}
+
+// encodePassword resolves the create/update password semantics into the
+// ciphertext to persist: keep (existingEnc), clear (""), or a fresh
+// encryption. Returns an error string for the client on failure.
+func (h *VncEndpointHandler) encodePassword(p *string, existingEnc string) (string, string) {
+	if p == nil {
+		return existingEnc, "" // unchanged
+	}
+	if *p == "" {
+		return "", "" // cleared
+	}
+	enc, err := vnccrypt.Encrypt(h.secret, *p)
+	if err != nil {
+		return "", "server has no VNC secret configured; cannot store a password"
+	}
+	return enc, ""
 }
 
 // GET /api/vnc-endpoints
@@ -73,8 +106,13 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
-	if msg := validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
+	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
+		return
+	}
+	passwordEnc, perr := h.encodePassword(req.Password, "")
+	if perr != "" {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, perr, map[string]any{"field": "password"}))
 		return
 	}
 
@@ -83,6 +121,7 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 		Addr:        strings.TrimSpace(req.Addr),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,
+		PasswordEnc: passwordEnc,
 	})
 	if err != nil {
 		dto.Write(c, dto.Err(traceID, dto.CodeInternalError, "Internal error", nil))
@@ -106,7 +145,7 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
-	if msg := validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
+	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
 		return
 	}
@@ -120,6 +159,11 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeNotFound, "Not found", nil))
 		return
 	}
+	passwordEnc, perr := h.encodePassword(req.Password, existing.PasswordEnc)
+	if perr != "" {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, perr, map[string]any{"field": "password"}))
+		return
+	}
 
 	err = h.repo.Update(c.Request.Context(), &vncendpoint.Endpoint{
 		ID:          id,
@@ -127,6 +171,7 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 		Addr:        strings.TrimSpace(req.Addr),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,
+		PasswordEnc: passwordEnc,
 	})
 	if err != nil {
 		dto.Write(c, dto.Err(traceID, dto.CodeInternalError, "Internal error", nil))

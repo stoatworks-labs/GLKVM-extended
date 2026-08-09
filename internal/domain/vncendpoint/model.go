@@ -10,6 +10,11 @@ type Endpoint struct {
 	Addr        string `json:"addr"`      // host:port of the VNC server
 	ViaDevice   string `json:"viaDevice"` // device id to tunnel through, "" = direct
 	Description string `json:"description"`
-	CreatedAt   int64  `json:"createdAt"`
-	UpdatedAt   int64  `json:"updatedAt"`
+	// PasswordEnc is the AES-GCM ciphertext of the VNC password (base64),
+	// or "" when no credential is stored. Never serialised to clients.
+	PasswordEnc string `json:"-"`
+	// HasPassword is a derived, safe-to-expose flag for the UI.
+	HasPassword bool  `json:"hasPassword"`
+	CreatedAt   int64 `json:"createdAt"`
+	UpdatedAt   int64 `json:"updatedAt"`
 }

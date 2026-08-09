@@ -396,6 +396,11 @@
     "connectFailed": "连接失败",
     "reconnect": "重新连接",
     "passwordRequired": "需要 VNC 密码",
-    "password": "密码"
+    "password": "密码",
+    "passwordTip": "在服务器端加密存储，并在 VNC 握手时注入，浏览器永远看不到。留空则保持当前设置。",
+    "passwordSet": "输入 VNC 密码（可选）",
+    "passwordKeep": "留空则保留已存储的密码",
+    "passwordClear": "删除已存储的密码",
+    "stored": "已存储"
   }
 }

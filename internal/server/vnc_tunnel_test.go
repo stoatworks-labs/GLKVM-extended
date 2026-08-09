@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/binary"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -19,59 +20,49 @@ import (
 func readDeviceFrame(t *testing.T, br *bufio.Reader) (byte, []byte) {
 	t.Helper()
 	head := make([]byte, 3)
-	if _, err := br.Read(head[:1]); err != nil {
-		t.Fatalf("read type: %v", err)
-	}
-	if _, err := br.Read(head[1:3]); err != nil {
-		t.Fatalf("read len: %v", err)
+	if _, err := io.ReadFull(br, head); err != nil {
+		t.Fatalf("read header: %v", err)
 	}
 	n := binary.BigEndian.Uint16(head[1:3])
 	body := make([]byte, n)
-	got := 0
-	for got < int(n) {
-		m, err := br.Read(body[got:])
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		got += m
+	if _, err := io.ReadFull(br, body); err != nil {
+		t.Fatalf("read body: %v", err)
 	}
 	return head[0], body
 }
 
-// TestVncTunnelBridge exercises the VNC-specific tunnel logic against a fake
-// device: the initial dial-kick frame, browser->device chunking, and the
-// device->browser return path via handleHttpMsg. The rtty framing itself is
-// the same path the shipping web proxy uses.
-func TestVncTunnelBridge(t *testing.T) {
-	// Device with a pipe conn so we can read what the bridge writes to it.
+// newFakeDevice returns a Device whose conn is a pipe, plus a channel of the
+// frames it writes (msgType + payload-after-sid).
+func newFakeDevice(t *testing.T) (*Device, <-chan []byte, context.CancelFunc) {
+	t.Helper()
 	serverConn, deviceConn := net.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	dev := &Device{
-		id:    "test-dev",
-		proto: 4, // proto>3 => sendHttpReq prefixes an https flag byte
-		conn:  serverConn,
-		ctx:   ctx,
-	}
+	dev := &Device{id: "test-dev", proto: 4, conn: serverConn, ctx: ctx}
 
-	frames := make(chan struct {
-		typ  byte
-		body []byte
-	}, 16)
+	frames := make(chan []byte, 32)
 	go func() {
 		br := bufio.NewReader(deviceConn)
 		for {
 			typ, body := readDeviceFrame(t, br)
-			frames <- struct {
-				typ  byte
-				body []byte
-			}{typ, body}
+			if typ == msgTypeHttp {
+				frames <- body
+			}
 		}
 	}()
+	return dev, frames, cancel
+}
 
-	// Real gorilla websocket pair via httptest.
-	var srvWS *websocket.Conn
-	ready := make(chan struct{})
+// framePayload extracts the payload from a proto>3 msgHttp frame body:
+// [httpsFlag][srcAddr 18][destAddr 6][payload].
+func framePayload(body []byte) []byte { return body[1+18+6:] }
+
+// TestVncTunnelBridge exercises the tunnel transport end-to-end through
+// vncRelay: the initial dial-kick, browser->device chunking, and the
+// device->browser return path via handleHttpMsg.
+func TestVncTunnelBridge(t *testing.T) {
+	dev, frames, cancel := newFakeDevice(t)
+	defer cancel()
+
 	up := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := up.Upgrade(w, r, nil)
@@ -79,52 +70,43 @@ func TestVncTunnelBridge(t *testing.T) {
 			t.Errorf("upgrade: %v", err)
 			return
 		}
-		srvWS = c
-		close(ready)
-		vncTunnelBridge(dev, "127.0.0.1:5901", c)
+		server := dialVncTunnel(dev, "127.0.0.1:5901")
+		if server == nil {
+			t.Errorf("dialVncTunnel returned nil")
+			return
+		}
+		vncRelay(server, c, "") // no password: transparent
 	}))
 	defer ts.Close()
 
-	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
-	cli, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	cli, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http"), nil)
 	if err != nil {
 		t.Fatalf("dial ws: %v", err)
 	}
 	defer cli.Close()
-	<-ready
 
-	// 1) Initial dial-kick: an empty-payload frame so the device connects to
-	//    the VNC server before the browser sends anything (RFB server speaks
-	//    first).
-	f := <-frames
-	if f.typ != msgTypeHttp {
-		t.Fatalf("dial-kick: got msgType %d, want %d", f.typ, msgTypeHttp)
+	// 1) Dial-kick: empty-payload frame so the device connects first.
+	body := <-frames
+	if len(body) != 1+18+6 {
+		t.Fatalf("dial-kick body len = %d, want %d", len(body), 1+18+6)
 	}
-	// body = [httpsFlag][srcAddr 18][destAddr 6][payload]
-	if len(f.body) != 1+18+6 {
-		t.Fatalf("dial-kick body len = %d, want %d (no payload)", len(f.body), 1+18+6)
-	}
-	srcAddr := append([]byte(nil), f.body[1:1+18]...)
-	destIP := net.IP(f.body[1+18 : 1+18+4])
-	destPort := binary.BigEndian.Uint16(f.body[1+18+4 : 1+18+6])
+	srcAddr := append([]byte(nil), body[1:1+18]...)
+	destIP := net.IP(body[1+18 : 1+18+4])
+	destPort := binary.BigEndian.Uint16(body[1+18+4 : 1+18+6])
 	if destIP.String() != "127.0.0.1" || destPort != 5901 {
 		t.Fatalf("dest = %s:%d, want 127.0.0.1:5901", destIP, destPort)
 	}
 
-	// 2) Browser -> device: payload is forwarded verbatim.
+	// 2) Browser -> device forwarding.
 	if err := cli.WriteMessage(websocket.BinaryMessage, []byte("hello-rfb")); err != nil {
 		t.Fatalf("client write: %v", err)
 	}
-	f = <-frames
-	payload := f.body[1+18+6:]
-	if string(payload) != "hello-rfb" {
-		t.Fatalf("forwarded payload = %q, want %q", payload, "hello-rfb")
+	if got := framePayload(<-frames); string(got) != "hello-rfb" {
+		t.Fatalf("forwarded payload = %q, want %q", got, "hello-rfb")
 	}
 
-	// 3) Device -> browser: handleHttpMsg writes to the conn registered under
-	//    srcAddr (our vncTunnelConn), which pushes onto the websocket.
-	msg := append(append([]byte(nil), srcAddr...), []byte("server-greeting")...)
-	if err := handleHttpMsg(dev, msg); err != nil {
+	// 3) Device -> browser via handleHttpMsg.
+	if err := handleHttpMsg(dev, append(append([]byte(nil), srcAddr...), []byte("server-greeting")...)); err != nil {
 		t.Fatalf("handleHttpMsg: %v", err)
 	}
 	cli.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -136,22 +118,15 @@ func TestVncTunnelBridge(t *testing.T) {
 		t.Fatalf("browser got (%d,%q), want binary %q", typ, data, "server-greeting")
 	}
 
-	// 4) Large browser payloads are split into <=vncChunkSize frames.
+	// 4) Large browser payloads split into <=vncChunkSize frames.
 	big := make([]byte, vncChunkSize+100)
-	for i := range big {
-		big[i] = byte(i)
-	}
 	if err := cli.WriteMessage(websocket.BinaryMessage, big); err != nil {
 		t.Fatalf("client write big: %v", err)
 	}
-	f = <-frames
-	if got := len(f.body) - (1 + 18 + 6); got != vncChunkSize {
-		t.Fatalf("first chunk payload = %d, want %d", got, vncChunkSize)
+	if got := len(framePayload(<-frames)); got != vncChunkSize {
+		t.Fatalf("first chunk = %d, want %d", got, vncChunkSize)
 	}
-	f = <-frames
-	if got := len(f.body) - (1 + 18 + 6); got != 100 {
-		t.Fatalf("second chunk payload = %d, want 100", got)
+	if got := len(framePayload(<-frames)); got != 100 {
+		t.Fatalf("second chunk = %d, want 100", got)
 	}
-
-	_ = srvWS
 }

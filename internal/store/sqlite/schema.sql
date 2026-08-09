@@ -105,8 +105,9 @@ CREATE TABLE IF NOT EXISTS vnc_endpoints (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL DEFAULT '',
   addr        TEXT    NOT NULL,
-  via_device  TEXT    NOT NULL DEFAULT '',
-  description TEXT    NOT NULL DEFAULT '',
-  created_at  INTEGER NOT NULL DEFAULT (unixepoch()),
-  updated_at  INTEGER NOT NULL DEFAULT (unixepoch())
+  via_device   TEXT    NOT NULL DEFAULT '',
+  description  TEXT    NOT NULL DEFAULT '',
+  password_enc TEXT    NOT NULL DEFAULT '',
+  created_at   INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at   INTEGER NOT NULL DEFAULT (unixepoch())
 );
