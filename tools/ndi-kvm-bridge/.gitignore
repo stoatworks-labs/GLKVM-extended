@@ -1,0 +1,8 @@
+# Licensed NDI runtime — never commit; point CFLAGS/LDFLAGS at your local copy
+*.dylib
+*.so
+# built binaries
+bridge/bridge
+testsender/testsender
+ndikvm
+ndisender
