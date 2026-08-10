@@ -37,6 +37,14 @@ const vncDialTimeout = 10 * time.Second
 // limit of the rtty framing (and matches the web proxy's read size).
 const vncChunkSize = 4096
 
+// vncUpgrader echoes the "binary" WebSocket subprotocol requested by the
+// xpra HTML5 client (and tolerated by noVNC); browsers reject a handshake
+// that fails to echo a client-requested subprotocol.
+var vncUpgrader = websocket.Upgrader{
+	CheckOrigin:  func(*http.Request) bool { return true },
+	Subprotocols: []string{"binary"},
+}
+
 // wsWriter serialises writes to a websocket connection.
 type wsWriter struct {
 	mu   sync.Mutex
@@ -116,7 +124,7 @@ func handleVncConnection(srv *RttyServer, c *gin.Context) {
 		}
 	}
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := vncUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("vnc: upgrade to websocket failed")
 		return

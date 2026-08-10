@@ -41,6 +41,7 @@
     "vue-clipboard3": "2.0.0",
     "vue-i18n": "^11.1.5",
     "vue-router": "^4.5.1",
+    "xpra-html5-client": "2.3.0",
     "xss": "^1.0.15"
   },
   "devDependencies": {
