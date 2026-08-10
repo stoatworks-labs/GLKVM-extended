@@ -18,7 +18,10 @@ type vncEndpointRow struct {
 	ID          int64  `gorm:"column:id;primaryKey"`
 	Name        string `gorm:"column:name"`
 	Kind        string `gorm:"column:kind"`
+	AuthMode    string `gorm:"column:auth_mode"`
 	Addr        string `gorm:"column:addr"`
+	Username    string `gorm:"column:username"`
+	Domain      string `gorm:"column:domain"`
 	ViaDevice   string `gorm:"column:via_device"`
 	Description string `gorm:"column:description"`
 	PasswordEnc string `gorm:"column:password_enc"`
@@ -33,11 +36,18 @@ func (r vncEndpointRow) toDomain() *vncendpoint.Endpoint {
 	if kind == "" {
 		kind = vncendpoint.KindVNC // legacy rows predate the column
 	}
+	authMode := vncendpoint.AuthMode(r.AuthMode)
+	if authMode == "" {
+		authMode = vncendpoint.AuthClient
+	}
 	return &vncendpoint.Endpoint{
 		ID:          r.ID,
 		Name:        r.Name,
 		Kind:        kind,
+		AuthMode:    authMode,
 		Addr:        r.Addr,
+		Username:    r.Username,
+		Domain:      r.Domain,
 		ViaDevice:   r.ViaDevice,
 		Description: r.Description,
 		PasswordEnc: r.PasswordEnc,
@@ -76,7 +86,10 @@ func (r *VncEndpointRepo) Create(ctx context.Context, e *vncendpoint.Endpoint) (
 	row := vncEndpointRow{
 		Name:        e.Name,
 		Kind:        string(e.Kind),
+		AuthMode:    string(e.AuthMode),
 		Addr:        e.Addr,
+		Username:    e.Username,
+		Domain:      e.Domain,
 		ViaDevice:   e.ViaDevice,
 		Description: e.Description,
 		PasswordEnc: e.PasswordEnc,
@@ -95,7 +108,10 @@ func (r *VncEndpointRepo) Update(ctx context.Context, e *vncendpoint.Endpoint) e
 		Updates(map[string]any{
 			"name":         e.Name,
 			"kind":         string(e.Kind),
+			"auth_mode":    string(e.AuthMode),
 			"addr":         e.Addr,
+			"username":     e.Username,
+			"domain":       e.Domain,
 			"via_device":   e.ViaDevice,
 			"description":  e.Description,
 			"password_enc": e.PasswordEnc,

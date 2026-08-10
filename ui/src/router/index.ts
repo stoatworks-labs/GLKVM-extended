@@ -71,6 +71,13 @@ const router = createRouter({
             name: 'xpraViewer',
             props: true,
         },
+        /** 代理模式 (guacd) 查看器 */
+        {
+            path: '/guac-view/:id',
+            component: () => import('@/views/vnc/guacViewerPage.vue'),
+            name: 'guacViewer',
+            props: true,
+        },
         /** 非白名单页 */
         {
             path: '/',

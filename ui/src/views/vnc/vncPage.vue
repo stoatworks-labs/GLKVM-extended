@@ -58,7 +58,10 @@
                     <AInput v-model:value="form.name" :maxlength="64" />
                 </AFormItem>
                 <AFormItem :label="$t('vnc.kind')" :extra="$t('vnc.kindTip')">
-                    <ASelect v-model:value="form.kind" :options="kindOptions" />
+                    <ASelect v-model:value="form.kind" :options="kindOptions" @change="onKindChange" />
+                </AFormItem>
+                <AFormItem v-if="showAuthMode" :label="$t('vnc.authMode')" :extra="$t('vnc.authModeTip')">
+                    <ASelect v-model:value="form.authMode" :options="authModeOptions" />
                 </AFormItem>
                 <AFormItem :label="$t('vnc.addr')" required :extra="$t('vnc.addrTip')">
                     <AInput v-model:value="form.addr" :placeholder="addrPlaceholder" />
@@ -75,7 +78,13 @@
                 <AFormItem :label="$t('vnc.description')">
                     <AInput v-model:value="form.description" :maxlength="128" />
                 </AFormItem>
-                <AFormItem v-if="form.kind === 'vnc'" :label="$t('vnc.password')" :extra="$t('vnc.passwordTip')">
+                <AFormItem v-if="showUserDomain" :label="$t('vnc.username')" required>
+                    <AInput v-model:value="form.username" autocomplete="off" />
+                </AFormItem>
+                <AFormItem v-if="showUserDomain" :label="$t('vnc.domain')">
+                    <AInput v-model:value="form.domain" autocomplete="off" />
+                </AFormItem>
+                <AFormItem v-if="showPassword" :label="$t('vnc.password')" :extra="$t('vnc.passwordTip')">
                     <AInput
                         v-model:value="passwordInput"
                         type="password"
@@ -91,7 +100,7 @@
                         {{ $t('vnc.passwordClear') }}
                     </ACheckbox>
                 </AFormItem>
-                <AFormItem v-else>
+                <AFormItem v-else-if="showClientHint">
                     <div class="hint">{{ $t('vnc.credClientSide') }}</div>
                 </AFormItem>
             </AForm>
@@ -129,7 +138,10 @@ const state = reactive({
 const form = reactive<VncEndpointForm>({
     name: '',
     kind: 'vnc',
+    authMode: 'client',
     addr: '',
+    username: '',
+    domain: '',
     viaDevice: '',
     description: '',
 })
@@ -139,9 +151,24 @@ const kindOptions = [
     { label: 'RDP', value: 'rdp' },
     { label: 'X (xpra)', value: 'xpra' },
 ]
+const authModeOptions = computed(() => [
+    { label: t('vnc.authClient'), value: 'client' },
+    { label: t('vnc.authProxy'), value: 'proxy' },
+])
 
 const defaultPorts: Record<string, string> = { vnc: '5900', rdp: '3389', xpra: '10000' }
 const addrPlaceholder = computed(() => `192.168.1.50:${defaultPorts[form.kind] || '5900'}`)
+
+// Field visibility depends on kind + authMode.
+const showAuthMode = computed(() => form.kind === 'vnc' || form.kind === 'rdp')
+const showPassword = computed(() => form.kind === 'vnc' || form.authMode === 'proxy')
+const showUserDomain = computed(() => form.authMode === 'proxy' && form.kind === 'rdp')
+const showClientHint = computed(() => form.authMode === 'client' && form.kind !== 'vnc')
+
+// xpra has no guacd proxy backend — force client mode when selected.
+const onKindChange = () => {
+    if (form.kind === 'xpra') form.authMode = 'client'
+}
 
 // Password is tracked outside `form` so we can distinguish "leave unchanged"
 // (empty input) from "clear" (checkbox) from "set" (typed value).
@@ -190,7 +217,10 @@ const openAdd = () => {
     state.editingHasPassword = false
     form.name = ''
     form.kind = 'vnc'
+    form.authMode = 'client'
     form.addr = ''
+    form.username = ''
+    form.domain = ''
     form.viaDevice = ''
     form.description = ''
     resetPassword()
@@ -202,7 +232,10 @@ const openEdit = (record: VncEndpoint) => {
     state.editingHasPassword = record.hasPassword
     form.name = record.name
     form.kind = record.kind || 'vnc'
+    form.authMode = record.authMode || 'client'
     form.addr = record.addr
+    form.username = record.username || ''
+    form.domain = record.domain || ''
     form.viaDevice = record.viaDevice
     form.description = record.description
     resetPassword()
@@ -218,7 +251,10 @@ const handleApply: OnBeforeOk = (done) => {
     const data: VncEndpointForm = {
         name: form.name,
         kind: form.kind,
+        authMode: form.authMode,
         addr: form.addr.trim(),
+        username: form.username.trim(),
+        domain: form.domain.trim(),
         viaDevice: form.viaDevice || '',
         description: form.description,
     }
@@ -246,7 +282,10 @@ const remove = async (record: VncEndpoint) => {
 }
 
 const connect = (record: VncEndpoint) => {
-    const route = { vnc: 'vnc-view', rdp: 'rdp-view', xpra: 'xpra-view' }[record.kind || 'vnc']
+    // Proxy-mode endpoints render via guacd regardless of kind.
+    const route = record.authMode === 'proxy'
+        ? 'guac-view'
+        : { vnc: 'vnc-view', rdp: 'rdp-view', xpra: 'xpra-view' }[record.kind || 'vnc']
     window.open(`/#/${route}/${record.id}`)
 }
 

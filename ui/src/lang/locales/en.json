@@ -407,6 +407,13 @@
     "credClientSide": "Credentials for RDP/X are entered in the viewer when you connect — not stored on the server.",
     "rdpConnecting": "Starting RDP session…",
     "xpraConnecting": "Starting X session…",
-    "unsupported": "This viewer could not load."
+    "unsupported": "This viewer could not load.",
+    "authMode": "Credentials",
+    "authModeTip": "Client: entered in the viewer. Proxy: stored on the server and used by guacd — never reach the browser (VNC/RDP only).",
+    "authClient": "Client-side (in viewer)",
+    "authProxy": "Proxy (guacd, server-side)",
+    "username": "Username",
+    "domain": "Domain (optional)",
+    "proxyBadge": "guacd proxy"
   }
 }

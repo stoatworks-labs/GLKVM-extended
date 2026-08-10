@@ -160,6 +160,16 @@ func ensureVncEndpointsTable(ctx context.Context, db *sql.DB) error {
         `ALTER TABLE vnc_endpoints ADD COLUMN kind TEXT NOT NULL DEFAULT 'vnc'`); err != nil {
         return err
     }
+    // auth_mode (client|proxy) + username/domain for proxy (guacd) mode.
+    for _, alter := range []string{
+        `ALTER TABLE vnc_endpoints ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'client'`,
+        `ALTER TABLE vnc_endpoints ADD COLUMN username TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE vnc_endpoints ADD COLUMN domain TEXT NOT NULL DEFAULT ''`,
+    } {
+        if err := addColumnIfMissing(ctx, db, alter); err != nil {
+            return err
+        }
+    }
     return nil
 }
 

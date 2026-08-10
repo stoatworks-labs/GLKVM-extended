@@ -407,6 +407,13 @@
     "credClientSide": "RDP/X 的凭据在连接时于查看器中输入，不会存储在服务器上。",
     "rdpConnecting": "正在启动 RDP 会话…",
     "xpraConnecting": "正在启动 X 会话…",
-    "unsupported": "查看器加载失败。"
+    "unsupported": "查看器加载失败。",
+    "authMode": "凭据",
+    "authModeTip": "客户端：在查看器中输入。代理：存储在服务器并由 guacd 使用，永不到达浏览器（仅 VNC/RDP）。",
+    "authClient": "客户端（查看器内）",
+    "authProxy": "代理（guacd，服务端）",
+    "username": "用户名",
+    "domain": "域（可选）",
+    "proxyBadge": "guacd 代理"
   }
 }

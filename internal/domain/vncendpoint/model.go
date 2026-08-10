@@ -22,16 +22,40 @@ func ValidKind(k Kind) bool {
 	}
 }
 
+// AuthMode selects how credentials are handled for a connection.
+//
+//	AuthClient - the browser speaks the protocol over the byte-bridge and the
+//	             user enters credentials in the viewer (except VNC, whose
+//	             server-side RFB auth-proxy can inject a stored password).
+//	AuthProxy  - a server-side guacd proxy terminates auth with the stored
+//	             username/password and renders to the browser, so credentials
+//	             never reach the client.
+type AuthMode string
+
+const (
+	AuthClient AuthMode = "client"
+	AuthProxy  AuthMode = "proxy"
+)
+
+// ValidAuthMode reports whether m is supported.
+func ValidAuthMode(m AuthMode) bool {
+	return m == AuthClient || m == AuthProxy
+}
+
 // Endpoint is a remote-desktop server users can connect to through the cloud.
 // When ViaDevice is empty the cloud dials Addr directly; otherwise the
 // connection is tunnelled through the named device's rtty link, so the
 // endpoint only needs to be reachable from that device's LAN.
 type Endpoint struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Kind        Kind   `json:"kind"`      // vnc | rdp | xpra
-	Addr        string `json:"addr"`      // host:port of the server
-	ViaDevice   string `json:"viaDevice"` // device id to tunnel through, "" = direct
+	ID          int64    `json:"id"`
+	Name        string   `json:"name"`
+	Kind        Kind     `json:"kind"`      // vnc | rdp | xpra
+	AuthMode    AuthMode `json:"authMode"`  // client | proxy
+	Addr        string   `json:"addr"`      // host:port of the server
+	ViaDevice   string   `json:"viaDevice"` // device id to tunnel through, "" = direct
+	// Username / Domain are used by proxy (guacd) mode; not secret.
+	Username    string `json:"username"`
+	Domain      string `json:"domain"`
 	Description string `json:"description"`
 	// PasswordEnc is the AES-GCM ciphertext of the VNC password (base64),
 	// or "" when no credential is stored. Never serialised to clients.

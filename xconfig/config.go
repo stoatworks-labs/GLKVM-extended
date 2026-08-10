@@ -68,6 +68,9 @@ type Config struct {
     // rest (AES-GCM). Falls back to Token when unset; if both are empty,
     // storing a password is refused (fail closed).
     VncSecret string
+    // GuacdAddr is the guacd daemon address for proxy-mode endpoints
+    // (default 127.0.0.1:4822 — a co-located sidecar).
+    GuacdAddr string
     // // LDAP Configuration
     LdapEnabled       bool
     LdapServer        string
@@ -210,6 +213,7 @@ func parseYamlCfg(cfg *Config, conf string) error {
         cfg.VncDirectAllowlist = splitScopes(vncAllowlist)
     }
     getConfigOpt(yamlCfg, "vnc-secret", &cfg.VncSecret)
+    getConfigOpt(yamlCfg, "guacd-addr", &cfg.GuacdAddr)
 
     // LDAP配置 (LDAP Configuration)
     getConfigOpt(yamlCfg, "ldap-enabled", &cfg.LdapEnabled)
@@ -310,6 +314,9 @@ func applyEnvCfg(cfg *Config) error {
     }
     if v := strings.TrimSpace(os.Getenv("GLKVM_VNC_SECRET")); v != "" {
         cfg.VncSecret = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_GUACD_ADDR")); v != "" {
+        cfg.GuacdAddr = v
     }
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG_LEVEL")); v != "" {
         cfg.LogLevel = v
