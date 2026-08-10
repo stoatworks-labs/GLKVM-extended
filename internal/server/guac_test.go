@@ -97,8 +97,9 @@ func TestGuacHandshake(t *testing.T) {
 		if r.err != "" {
 			t.Fatalf("fake guacd: %s", r.err)
 		}
-		// connect values must be in args order: hostname,port,username,password,domain
-		want := []string{"connect", "100.94.198.79", "3389", "rdptest", "RdpTest2026", ""}
+		// connect echoes the version, then values in args order:
+		// hostname,port,username,password,domain
+		want := []string{"connect", "VERSION_1_3_0", "100.94.198.79", "3389", "rdptest", "RdpTest2026", ""}
 		if !reflect.DeepEqual(r.connect, want) {
 			t.Fatalf("connect = %v, want %v", r.connect, want)
 		}

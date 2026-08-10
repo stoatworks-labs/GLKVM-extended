@@ -114,11 +114,17 @@ func guacHandshake(rw io.ReadWriter, protocol string, params map[string]string, 
 		return nil, nil, err
 	}
 
-	// args[1] is the protocol version; args[2:] are the parameter names, in the
-	// order the connect instruction must supply values.
+	// The connect instruction must supply one value for every element of args
+	// after the opcode, IN ORDER. guacd 1.1.0+ makes the first element the
+	// protocol version pseudo-arg, which the client echoes back; the remaining
+	// elements are parameter names, for which we supply values ("" if unknown).
 	connect := make([]string, 0, len(args))
 	connect = append(connect, "connect")
-	for _, name := range args[2:] {
+	for i, name := range args[1:] {
+		if i == 0 && strings.HasPrefix(name, "VERSION_") {
+			connect = append(connect, name) // echo negotiated version
+			continue
+		}
 		connect = append(connect, params[name]) // "" when we have no value
 	}
 	if _, err := rw.Write(guacEncode(connect...)); err != nil {
