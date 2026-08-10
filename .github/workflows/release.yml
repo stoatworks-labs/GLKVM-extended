@@ -42,14 +42,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Build ui
-        run: |
-          cd ui
-          npm install
-          npm run build
-          cd ..
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
 
       - name: Build ui and cross-compiled binaries
         run: |

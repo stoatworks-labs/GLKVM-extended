@@ -20,17 +20,15 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
       - name: ui
-        run: |
-          cd ui
-          npm install
-          npm run build
-          cd ..
+        run: make ui
       - name: build
         env:
           target: ${{ matrix.target }}
         run: |
           os=$(echo $target | awk -F. '{print $1}')
           arch=$(echo $target | awk -F. '{print $2}')
-          ./build.sh $os $arch
+          make build BUILD_OS="$os" BUILD_ARCH="$arch"

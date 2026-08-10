@@ -15,15 +15,38 @@ IMAGE_TAG   ?= build
 GOARCH ?= $(shell go env GOARCH)
 
 # ---------------- Commands ----------------
-.PHONY: all ui debug-local debug-dev-server \
+.PHONY: all ui build debug-local debug-dev-server \
         build-linux-amd64 build-linux-arm64 build-linux-all \
         docker-buildx docker-buildx-full
 
 all: build-linux-amd64 build-linux-arm64
 
-# Build frontend files only
+# Build frontend files only.
+#
+# yarn, not npm: the lockfile here is yarn.lock, and package.json carries a
+# `resolutions` block that only yarn honours -- it is what holds minimatch and
+# brace-expansion on patched majors that eslint and typescript-estree would
+# otherwise pull in below. Under `npm install` that block is silently ignored
+# and the lockfile is not consulted at all, so the build is neither pinned nor
+# the one the alerts were cleared against.
 ui:
-	cd $(UI_DIR) && npm install && npm run build
+	cd $(UI_DIR) && yarn install --frozen-lockfile && yarn build
+
+# ---------------- Cross compile (generic) ----------------
+# One target for any GOOS/GOARCH, so CI's build matrix and the release job
+# share these flags rather than each carrying their own copy.
+#
+#   make build BUILD_OS=windows BUILD_ARCH=amd64
+#
+# Produces dist/rttys-<os>-<arch>, with .exe appended for windows.
+BUILD_OS   ?= $(shell go env GOOS)
+BUILD_ARCH ?= $(shell go env GOARCH)
+BUILD_EXT   = $(if $(filter windows,$(BUILD_OS)),.exe,)
+
+build:
+	@mkdir -p $(DIST_DIR)
+	CGO_ENABLED=0 GOOS=$(BUILD_OS) GOARCH=$(BUILD_ARCH) \
+		go build $(BUILD_FLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-$(BUILD_OS)-$(BUILD_ARCH)$(BUILD_EXT) $(GO_MAIN)
 
 # ---------------- Cross compile (Linux) ----------------
 # Produce: dist/rttys-linux-amd64 , dist/rttys-linux-arm64
