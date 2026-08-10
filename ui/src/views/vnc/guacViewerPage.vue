@@ -30,6 +30,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import Guacamole from 'guacamole-common-js'
 
 const props = defineProps({ id: { type: String, required: true } })
 const { t } = useI18n()
@@ -44,17 +45,15 @@ const statusText = computed(() =>
         : state.status === 'failed' ? t('vnc.connectFailed')
             : t('vnc.rdpConnecting'))
 
-const connect = async () => {
+const connect = () => {
     state.status = 'connecting'
     try {
-        const pkg = 'guacamole-common-js'
-        const mod: any = await import(/* @vite-ignore */ pkg)
-        const Guacamole = mod.default || mod
         const el = screen.value!
         const w = Math.max(el.clientWidth || 1280, 640)
         const h = Math.max(el.clientHeight || 800, 480)
 
-        const tunnel = new Guacamole.WebSocketTunnel(`connect-guac/${props.id}`)
+        const proto = location.protocol === 'https:' ? 'wss://' : 'ws://'
+        const tunnel = new Guacamole.WebSocketTunnel(`${proto}${location.host}/connect-guac/${props.id}`)
         client = new Guacamole.Client(tunnel)
         el.appendChild(client.getDisplay().getElement())
 

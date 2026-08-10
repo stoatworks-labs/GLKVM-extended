@@ -29,6 +29,14 @@ import (
 
 const guacDialTimeout = 10 * time.Second
 
+// guacUpgrader echoes the "guacamole" WebSocket subprotocol that
+// guacamole-common-js requests — browsers reject the handshake if a
+// client-requested subprotocol is not echoed by the server.
+var guacUpgrader = websocket.Upgrader{
+	CheckOrigin:  func(*http.Request) bool { return true },
+	Subprotocols: []string{"guacamole"},
+}
+
 // guacEncode builds one Guacamole instruction: LEN.VALUE,LEN.VALUE,...;
 // where LEN is the number of Unicode characters in VALUE.
 func guacEncode(elems ...string) []byte {
@@ -235,10 +243,18 @@ func handleGuacConnection(srv *RttyServer, c *gin.Context) {
 	h := atoiDefault(c.Query("height"), 800)
 	dpi := atoiDefault(c.Query("dpi"), 96)
 
+	// Upgrade first so the browser's WebSocket opens immediately; the guacd +
+	// RDP handshake below can take a few seconds (RDP negotiation), which would
+	// otherwise stall the pending ws handshake and make the browser give up.
+	conn, err := guacUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+
 	guac, err := net.DialTimeout("tcp", srv.guacdAddr(), guacDialTimeout)
 	if err != nil {
 		log.Warn().Err(err).Msgf("guac: dial guacd %s failed", srv.guacdAddr())
-		c.Status(http.StatusBadGateway)
 		return
 	}
 	defer guac.Close()
@@ -246,15 +262,8 @@ func handleGuacConnection(srv *RttyServer, c *gin.Context) {
 	br, ready, err := guacHandshake(guac, protocol, guacParams(ep, password), w, h, dpi)
 	if err != nil {
 		log.Warn().Err(err).Msgf("guac: handshake failed for endpoint %d", ep.ID)
-		c.Status(http.StatusBadGateway)
 		return
 	}
-
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		return
-	}
-	defer conn.Close()
 
 	// Audit log (reuse the VNC session type; detail carries proxy+protocol).
 	var logID int64
