@@ -71,6 +71,15 @@ type Config struct {
     // GuacdAddr is the guacd daemon address for proxy-mode endpoints
     // (default 127.0.0.1:4822 — a co-located sidecar).
     GuacdAddr string
+    // RdpGatewayURL is the base ws(s):// URL of the Devolutions Gateway
+    // sidecar used for client-side RDP (IronRDP-web speaks RDCleanPath to it).
+    // The RDP viewer connects to "<RdpGatewayURL>/jet/rdp". Empty disables
+    // client-side RDP (the viewer reports it as unconfigured).
+    RdpGatewayURL string
+    // RdpProvisionerKey is the path to the RSA private key (PEM) whose public
+    // half the gateway trusts as its provisioner. The cloud signs short-lived
+    // RS256 association tokens with it so credentials stay in the browser.
+    RdpProvisionerKey string
     // // LDAP Configuration
     LdapEnabled       bool
     LdapServer        string
@@ -214,6 +223,8 @@ func parseYamlCfg(cfg *Config, conf string) error {
     }
     getConfigOpt(yamlCfg, "vnc-secret", &cfg.VncSecret)
     getConfigOpt(yamlCfg, "guacd-addr", &cfg.GuacdAddr)
+    getConfigOpt(yamlCfg, "rdp-gateway-url", &cfg.RdpGatewayURL)
+    getConfigOpt(yamlCfg, "rdp-provisioner-key", &cfg.RdpProvisionerKey)
 
     // LDAP配置 (LDAP Configuration)
     getConfigOpt(yamlCfg, "ldap-enabled", &cfg.LdapEnabled)
@@ -317,6 +328,12 @@ func applyEnvCfg(cfg *Config) error {
     }
     if v := strings.TrimSpace(os.Getenv("GLKVM_GUACD_ADDR")); v != "" {
         cfg.GuacdAddr = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_RDP_GATEWAY_URL")); v != "" {
+        cfg.RdpGatewayURL = v
+    }
+    if v := strings.TrimSpace(os.Getenv("GLKVM_RDP_PROVISIONER_KEY")); v != "" {
+        cfg.RdpProvisionerKey = v
     }
     if v := strings.TrimSpace(os.Getenv("RTTYS_LOG_LEVEL")); v != "" {
         cfg.LogLevel = v

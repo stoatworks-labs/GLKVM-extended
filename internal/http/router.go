@@ -167,11 +167,14 @@ func RegisterAPIRoutes(r *gin.Engine, d Deps) {
     if vncSecret == "" {
         vncSecret = cfg.Token
     }
-    vncH := handler.NewVncEndpointHandler(d.VncEndpointRepo, vncSecret, cfg.VncDirectAllowlist)
+    vncH := handler.NewVncEndpointHandler(d.VncEndpointRepo, vncSecret, cfg.VncDirectAllowlist, cfg.RdpGatewayURL, cfg.RdpProvisionerKey)
     api.GET("/vnc-endpoints", middleware.Require(permission.VncEndpointRead), vncH.List)
     api.POST("/vnc-endpoints", middleware.Require(permission.VncEndpointWrite), vncH.Create)
     api.PUT("/vnc-endpoints/:id", middleware.Require(permission.VncEndpointWrite), vncH.Update)
     api.DELETE("/vnc-endpoints/:id", middleware.Require(permission.VncEndpointWrite), vncH.Delete)
+    // Mint a client-side RDP gateway token (read permission: any user who can
+    // see the endpoint may connect; RDP creds are entered in the browser).
+    api.POST("/vnc-endpoints/:id/rdp-session", middleware.Require(permission.VncEndpointRead), vncH.RdpSession)
 
     // device event logs (admin only)
     api.GET("/device-event-logs", middleware.Require(permission.DeviceLogRead), devLogH.List)

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/rsa"
 	"net"
 	"strconv"
 	"strings"
@@ -8,25 +9,42 @@ import (
 	"rttys/internal/domain/vncendpoint"
 	"rttys/internal/http/dto"
 	"rttys/internal/http/middleware"
+	"rttys/internal/pkg/rdptoken"
 	"rttys/internal/pkg/vnccrypt"
 	"rttys/internal/store/sqlite"
 	"rttys/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 type VncEndpointHandler struct {
 	repo      *sqlite.VncEndpointRepo
 	secret    string
 	allowlist []*net.IPNet
+	// rdpGatewayURL is the Devolutions Gateway base ws(s):// URL for
+	// client-side RDP; rdpKey signs the association tokens. Both empty/nil
+	// when client-side RDP is not configured.
+	rdpGatewayURL string
+	rdpKey        *rsa.PrivateKey
 }
 
-func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlist []string) *VncEndpointHandler {
-	return &VncEndpointHandler{
-		repo:      repo,
-		secret:    secret,
-		allowlist: utils.ParseCIDRs(allowlist),
+func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlist []string, rdpGatewayURL, rdpKeyPath string) *VncEndpointHandler {
+	h := &VncEndpointHandler{
+		repo:          repo,
+		secret:        secret,
+		allowlist:     utils.ParseCIDRs(allowlist),
+		rdpGatewayURL: strings.TrimRight(strings.TrimSpace(rdpGatewayURL), "/"),
 	}
+	if p := strings.TrimSpace(rdpKeyPath); p != "" {
+		key, err := rdptoken.LoadKey(p)
+		if err != nil {
+			log.Warn().Err(err).Msgf("rdp: cannot load provisioner key %s; client-side RDP disabled", p)
+		} else {
+			h.rdpKey = key
+		}
+	}
+	return h
 }
 
 type vncEndpointReq struct {

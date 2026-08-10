@@ -221,6 +221,16 @@
   resolved "https://registry.npmmirror.com/@ctrl/tinycolor/-/tinycolor-3.6.1.tgz"
   integrity sha512-SITSV6aIXsuVNV3f3O0f2n/cgyEDWoSqtZMYiAmcsYHydcKrOz3gUxB/iXd/Qf08+IZX4KpgNbvUdMBmWz+kcA==
 
+"@devolutions/iron-remote-desktop-rdp@0.7.0":
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/@devolutions/iron-remote-desktop-rdp/-/iron-remote-desktop-rdp-0.7.0.tgz#fb2b483ee356c522b19b831f788025548b06f631"
+  integrity sha512-CclAh4OS9aBoPJT0l7bih7ETOHPnB9KjT0drB0a6r5+Qh95pTEuQCx7uFN/XA2AlkFlrqx+DBAMDGYXmgsjHAQ==
+
+"@devolutions/iron-remote-desktop@0.11.0":
+  version "0.11.0"
+  resolved "https://registry.yarnpkg.com/@devolutions/iron-remote-desktop/-/iron-remote-desktop-0.11.0.tgz#a09088bf1ecda7e1b67daa58be809fd805de9010"
+  integrity sha512-ZH8xfabDA+6rAXkW2V3XgRdj0LHOsHoXAzars/H22DmKsHM39LdMfheKFUR3qLaFDM8mjf6DTFngzjgr+Byx0Q==
+
 "@emotion/hash@^0.9.0":
   version "0.9.2"
   resolved "https://registry.npmmirror.com/@emotion/hash/-/hash-0.9.2.tgz"
