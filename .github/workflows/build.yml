@@ -12,25 +12,23 @@ jobs:
       matrix:
         target: [ linux.amd64, linux.arm64, windows.amd64 ]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: 1.24.4
-      - uses: actions/setup-node@v4
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: ui/yarn.lock
       - name: ui
-        run: |
-          cd ui
-          npm install
-          npm run build
-          cd ..
+        run: make ui
       - name: build
         env:
           target: ${{ matrix.target }}
         run: |
           os=$(echo $target | awk -F. '{print $1}')
           arch=$(echo $target | awk -F. '{print $2}')
-          ./build.sh $os $arch
+          make build BUILD_OS="$os" BUILD_ARCH="$arch"
