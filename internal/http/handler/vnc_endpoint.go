@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/rsa"
 	"net"
 	"strconv"
 	"strings"
@@ -8,35 +9,81 @@ import (
 	"rttys/internal/domain/vncendpoint"
 	"rttys/internal/http/dto"
 	"rttys/internal/http/middleware"
+	"rttys/internal/pkg/rdptoken"
 	"rttys/internal/pkg/vnccrypt"
 	"rttys/internal/store/sqlite"
 	"rttys/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/rs/zerolog/log"
 )
 
 type VncEndpointHandler struct {
 	repo      *sqlite.VncEndpointRepo
 	secret    string
 	allowlist []*net.IPNet
+	// rdpGatewayURL is the Devolutions Gateway base ws(s):// URL for
+	// client-side RDP; rdpKey signs the association tokens. Both empty/nil
+	// when client-side RDP is not configured.
+	rdpGatewayURL string
+	rdpKey        *rsa.PrivateKey
 }
 
-func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlist []string) *VncEndpointHandler {
-	return &VncEndpointHandler{
-		repo:      repo,
-		secret:    secret,
-		allowlist: utils.ParseCIDRs(allowlist),
+func NewVncEndpointHandler(repo *sqlite.VncEndpointRepo, secret string, allowlist []string, rdpGatewayURL, rdpKeyPath string) *VncEndpointHandler {
+	h := &VncEndpointHandler{
+		repo:          repo,
+		secret:        secret,
+		allowlist:     utils.ParseCIDRs(allowlist),
+		rdpGatewayURL: strings.TrimRight(strings.TrimSpace(rdpGatewayURL), "/"),
 	}
+	if p := strings.TrimSpace(rdpKeyPath); p != "" {
+		key, err := rdptoken.LoadKey(p)
+		if err != nil {
+			log.Warn().Err(err).Msgf("rdp: cannot load provisioner key %s; client-side RDP disabled", p)
+		} else {
+			h.rdpKey = key
+		}
+	}
+	return h
 }
 
 type vncEndpointReq struct {
 	Name        string `json:"name"`
+	Kind        string `json:"kind"`
+	AuthMode    string `json:"authMode"`
 	Addr        string `json:"addr"`
+	Username    string `json:"username"`
+	Domain      string `json:"domain"`
 	ViaDevice   string `json:"viaDevice"`
 	Description string `json:"description"`
 	// Password: nil = leave unchanged (update) / none (create); "" = clear;
 	// non-empty = set. Never echoed back.
 	Password *string `json:"password"`
+}
+
+// resolveKind defaults an empty kind to VNC and validates it.
+func resolveKind(k string) (vncendpoint.Kind, bool) {
+	if k == "" {
+		return vncendpoint.KindVNC, true
+	}
+	kind := vncendpoint.Kind(k)
+	return kind, vncendpoint.ValidKind(kind)
+}
+
+// resolveAuthMode defaults an empty mode to client and validates it against the
+// kind (proxy is only available for VNC/RDP — xpra has no guacd backend).
+func resolveAuthMode(m string, kind vncendpoint.Kind) (vncendpoint.AuthMode, string) {
+	mode := vncendpoint.AuthMode(m)
+	if m == "" {
+		mode = vncendpoint.AuthClient
+	}
+	if !vncendpoint.ValidAuthMode(mode) {
+		return "", "invalid authMode"
+	}
+	if mode == vncendpoint.AuthProxy && kind == vncendpoint.KindXpra {
+		return "", "proxy mode is not available for X (xpra)"
+	}
+	return mode, ""
 }
 
 // validateVncAddr checks host:port shape. Tunnelled endpoints must be IPv4
@@ -106,6 +153,16 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
+	kind, ok := resolveKind(req.Kind)
+	if !ok {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid kind", map[string]any{"field": "kind"}))
+		return
+	}
+	authMode, amErr := resolveAuthMode(req.AuthMode, kind)
+	if amErr != "" {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, amErr, map[string]any{"field": "authMode"}))
+		return
+	}
 	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
 		return
@@ -118,7 +175,11 @@ func (h *VncEndpointHandler) Create(c *gin.Context) {
 
 	id, err := h.repo.Create(c.Request.Context(), &vncendpoint.Endpoint{
 		Name:        req.Name,
+		Kind:        kind,
+		AuthMode:    authMode,
 		Addr:        strings.TrimSpace(req.Addr),
+		Username:    strings.TrimSpace(req.Username),
+		Domain:      strings.TrimSpace(req.Domain),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,
 		PasswordEnc: passwordEnc,
@@ -145,6 +206,16 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid argument", map[string]any{"field": "name"}))
 		return
 	}
+	kind, ok := resolveKind(req.Kind)
+	if !ok {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, "Invalid kind", map[string]any{"field": "kind"}))
+		return
+	}
+	authMode, amErr := resolveAuthMode(req.AuthMode, kind)
+	if amErr != "" {
+		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, amErr, map[string]any{"field": "authMode"}))
+		return
+	}
 	if msg := h.validateVncAddr(req.Addr, req.ViaDevice); msg != "" {
 		dto.Write(c, dto.Err(traceID, dto.CodeInvalidArgument, msg, map[string]any{"field": "addr"}))
 		return
@@ -168,7 +239,11 @@ func (h *VncEndpointHandler) Update(c *gin.Context) {
 	err = h.repo.Update(c.Request.Context(), &vncendpoint.Endpoint{
 		ID:          id,
 		Name:        req.Name,
+		Kind:        kind,
+		AuthMode:    authMode,
 		Addr:        strings.TrimSpace(req.Addr),
+		Username:    strings.TrimSpace(req.Username),
+		Domain:      strings.TrimSpace(req.Domain),
 		ViaDevice:   strings.TrimSpace(req.ViaDevice),
 		Description: req.Description,
 		PasswordEnc: passwordEnc,

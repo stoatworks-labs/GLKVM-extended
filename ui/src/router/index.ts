@@ -57,6 +57,27 @@ const router = createRouter({
             name: 'vncViewer',
             props: true,
         },
+        /** RDP 查看器 */
+        {
+            path: '/rdp-view/:id',
+            component: () => import('@/views/vnc/rdpViewerPage.vue'),
+            name: 'rdpViewer',
+            props: true,
+        },
+        /** X (xpra) 查看器 */
+        {
+            path: '/xpra-view/:id',
+            component: () => import('@/views/vnc/xpraViewerPage.vue'),
+            name: 'xpraViewer',
+            props: true,
+        },
+        /** 代理模式 (guacd) 查看器 */
+        {
+            path: '/guac-view/:id',
+            component: () => import('@/views/vnc/guacViewerPage.vue'),
+            name: 'guacViewer',
+            props: true,
+        },
         /** 非白名单页 */
         {
             path: '/',

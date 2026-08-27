@@ -292,6 +292,14 @@ func (srv *RttyServer) ListenAPI() error {
 		handleVncConnection(srv, c)
 	})
 
+	authorized.GET("/connect-guac/:id", func(c *gin.Context) {
+		if !callUserHookUrl(cfg, c) {
+			c.Status(http.StatusForbidden)
+			return
+		}
+		handleGuacConnection(srv, c)
+	})
+
 	container, err := InitAppContainer(r)
 	if err != nil {
 		return err

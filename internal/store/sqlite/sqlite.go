@@ -151,8 +151,30 @@ func ensureVncEndpointsTable(ctx context.Context, db *sql.DB) error {
     // password_enc holds the AES-GCM ciphertext of the VNC password (base64),
     // or '' when the endpoint has no stored credential. Added via ALTER so
     // existing databases migrate in place.
-    if _, err := db.ExecContext(ctx,
+    if err := addColumnIfMissing(ctx, db,
         `ALTER TABLE vnc_endpoints ADD COLUMN password_enc TEXT NOT NULL DEFAULT ''`); err != nil {
+        return err
+    }
+    // kind identifies the protocol (vnc|rdp|xpra); legacy rows default to vnc.
+    if err := addColumnIfMissing(ctx, db,
+        `ALTER TABLE vnc_endpoints ADD COLUMN kind TEXT NOT NULL DEFAULT 'vnc'`); err != nil {
+        return err
+    }
+    // auth_mode (client|proxy) + username/domain for proxy (guacd) mode.
+    for _, alter := range []string{
+        `ALTER TABLE vnc_endpoints ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'client'`,
+        `ALTER TABLE vnc_endpoints ADD COLUMN username TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE vnc_endpoints ADD COLUMN domain TEXT NOT NULL DEFAULT ''`,
+    } {
+        if err := addColumnIfMissing(ctx, db, alter); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func addColumnIfMissing(ctx context.Context, db *sql.DB, alter string) error {
+    if _, err := db.ExecContext(ctx, alter); err != nil {
         if !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
             return err
         }

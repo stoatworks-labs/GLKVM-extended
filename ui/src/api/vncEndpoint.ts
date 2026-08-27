@@ -33,3 +33,18 @@ export const reqDeleteVncEndpoint = (id: number) => {
         method: 'DELETE',
     })
 }
+
+/** 获取客户端 RDP 会话令牌 (Devolutions Gateway) */
+export interface RdpSession {
+    proxyAddress: string
+    authToken: string
+    destination: string
+    username: string
+    domain: string
+}
+export const reqRdpSession = (id: number) => {
+    return request<RdpSession>({
+        url: `/api/vnc-endpoints/${id}/rdp-session`,
+        method: 'POST',
+    })
+}
