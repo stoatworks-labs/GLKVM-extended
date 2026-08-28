@@ -1,3 +1,12 @@
+> **AI-assisted project.** The README below this line is upstream's, and describes upstream's
+> platform. What *this fork* adds — the VNC, RDP and xpra endpoints, the reverse-tunnel agent, the
+> CIDR allowlist and the RFB auth-proxy — was created with
+> [Claude Code](https://claude.com/claude-code). A password-protected VNC endpoint has been
+> **verified rendering in a browser with no prompt**, and the VNC authentication cipher is pinned
+> against OpenSSL's own engine; **the guacd proxy path has never had a real guacd draw a frame**,
+> and the NDI KVM bridge is a proof of concept. See
+> [the user guide](docs/USER-GUIDE.md) for what the fork adds and what is verified.
+
 # Self-Deployed Lightweight Cloud KVM Remote Management Platform
 
 [中文文档](./README.zh-CN.md) | English
