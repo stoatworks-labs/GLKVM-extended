@@ -1,7 +1,7 @@
 > **AI-assisted project.** The README below this line is upstream's, and describes upstream's
 > platform. What *this fork* adds — the VNC, RDP and xpra endpoints, the reverse-tunnel agent, the
 > CIDR allowlist and the RFB auth-proxy — was created with
-> [Claude Code](https://claude.com/claude-code). A password-protected VNC endpoint has been
+> [Claude](https://claude.com/claude-code) (Anthropic), directed and reviewed by a human author. A password-protected VNC endpoint has been
 > **verified rendering in a browser with no prompt**, and the VNC authentication cipher is pinned
 > against OpenSSL's own engine; **the guacd proxy path has never had a real guacd draw a frame**,
 > and the NDI KVM bridge is a proof of concept. See
