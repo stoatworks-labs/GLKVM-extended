@@ -66,6 +66,6 @@
   },
   "resolutions": {
     "minimatch": "^9.0.7",
-    "brace-expansion": "^2.1.4"
+    "brace-expansion": "^2.1.7"
   }
 }
