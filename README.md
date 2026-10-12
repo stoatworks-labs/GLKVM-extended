@@ -3,8 +3,8 @@
 > CIDR allowlist and the RFB auth-proxy — was created with
 > [Claude](https://claude.com/claude-code) (Anthropic), directed and reviewed by a human author. A password-protected VNC endpoint has been
 > **verified rendering in a browser with no prompt**, and the VNC authentication cipher is pinned
-> against OpenSSL's own engine; **the guacd proxy path has never had a real guacd draw a frame**,
-> and the NDI KVM bridge is a proof of concept. See
+> against OpenSSL's own engine; **the guacd proxy path has only been verified for RDP**, through a
+> real guacd to Windows 11, and the NDI KVM bridge is a proof of concept. See
 > [the user guide](docs/USER-GUIDE.md) for what the fork adds and what is verified.
 
 # Self-Deployed Lightweight Cloud KVM Remote Management Platform

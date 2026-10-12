@@ -16,9 +16,11 @@ what the fork adds.**
 > fake server. A password-protected VNC endpoint has been **verified rendering in a browser with no
 > prompt**.
 >
-> **The guacd proxy path has not been verified rendering in a browser.** The codec and the full
-> handshake are tested against a fake guacd and the handler fails gracefully when none is present,
-> but no real guacd has drawn a frame here.
+> **The guacd proxy path has been verified rendering in a browser for RDP only.** A real guacd 1.3.0
+> logged in to a Windows 11 machine with server-held credentials and the live desktop rendered in
+> the browser (2026-08-10). Proxy-mode VNC through guacd hasn't been verified against a real guacd.
+> The codec and the full handshake are also tested against a fake guacd, and the handler fails
+> gracefully when none is present.
 >
 > This work was created with AI assistance, directed and reviewed by a human author.
 
