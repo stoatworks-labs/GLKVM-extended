@@ -41,7 +41,7 @@
     "vite-plugin-remove-console": "^2.2.0",
     "vue": "^3.5.13",
     "vue-clipboard3": "2.0.0",
-    "vue-i18n": "^11.1.5",
+    "vue-i18n": "^11.4.14",
     "vue-router": "^4.5.1",
     "xpra-html5-client": "2.3.0",
     "xss": "^1.0.15"
@@ -65,8 +65,9 @@
     "vue-tsc": "^2.2.8"
   },
   "resolutions": {
-    "minimatch": "^9.0.7",
-    "brace-expansion": "^2.1.7",
-    "postcss-selector-parser": "^7.1.6"
+    "minimatch": "^11.0.1",
+    "brace-expansion": "^5.0.12",
+    "postcss-selector-parser": "^7.1.6",
+    "gl-web-main/vue-i18n": "^11.4.14"
   }
 }
