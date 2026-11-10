@@ -77,10 +77,10 @@ func TestGuacHandshake(t *testing.T) {
 	}()
 
 	params := map[string]string{
-		"hostname": "100.94.198.79",
+		"hostname": "100.64.0.5",
 		"port":     "3389",
-		"username": "rdptest",
-		"password": "RdpTest2026",
+		"username": "rdpuser",
+		"password": "fixture-pass",
 		"domain":   "",
 	}
 	br, ready, err := guacHandshake(clientSide, "rdp", params, 1280, 800, 96)
@@ -99,7 +99,7 @@ func TestGuacHandshake(t *testing.T) {
 		}
 		// connect echoes the version, then values in args order:
 		// hostname,port,username,password,domain
-		want := []string{"connect", "VERSION_1_3_0", "100.94.198.79", "3389", "rdptest", "RdpTest2026", ""}
+		want := []string{"connect", "VERSION_1_3_0", "100.64.0.5", "3389", "rdpuser", "fixture-pass", ""}
 		if !reflect.DeepEqual(r.connect, want) {
 			t.Fatalf("connect = %v, want %v", r.connect, want)
 		}
